@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { EmailGate } from '@datumlabs/dashboard-kit';
+import { EmailGate } from '@/components/sdk';
 import { TickerBar } from '@/components/TickerBar';
 
 const navItems = [

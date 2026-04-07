@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { globalCache } from '@datumlabs/data-connectors';
+import { globalCache } from '@/lib/sdk/cache';
 import { getCentrifugeTvlHistory } from '@/lib/data/defillama';
 import type { TvlHistoryData } from '@/lib/data/types';
 

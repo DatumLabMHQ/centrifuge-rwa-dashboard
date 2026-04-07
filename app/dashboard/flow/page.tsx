@@ -6,7 +6,7 @@ import { ResponsiveContainer, Sankey, Tooltip } from 'recharts';
 import {
   ErrorState,
   TuiPanel,
-} from '@datumlabs/dashboard-kit';
+} from '@/components/sdk';
 import { formatCurrency } from '@/lib/format';
 import type { CrossChainFlowData, FlowData, FlowNode } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';

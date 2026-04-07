@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { globalCache } from '@datumlabs/data-connectors';
+import { globalCache } from '@/lib/sdk/cache';
 import {
   getAllPools,
   getRecentFlowTransactions,

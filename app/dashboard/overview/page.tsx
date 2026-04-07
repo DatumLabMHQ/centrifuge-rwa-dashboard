@@ -15,7 +15,7 @@ import {
 import {
   ErrorState,
   TuiPanel,
-} from '@datumlabs/dashboard-kit';
+} from '@/components/sdk';
 import { formatCurrency } from '@/lib/format';
 import type { OverviewData, TvlHistoryData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';

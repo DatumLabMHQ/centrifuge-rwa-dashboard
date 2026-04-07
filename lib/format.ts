@@ -5,7 +5,7 @@
  * false for negatives — producing junk like `$-349159686.77` for $-349M.
  */
 
-import { formatCurrency as sdkFormatCurrency } from '@datumlabs/data-connectors';
+import { formatCurrency as sdkFormatCurrency } from '@/lib/sdk/helpers';
 
 export function formatCurrency(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '$0.00';

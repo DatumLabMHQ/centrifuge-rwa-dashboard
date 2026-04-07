@@ -6,7 +6,7 @@
  * endpoint — there is no per-chain subgraph to register.
  */
 
-import { GraphConnector } from '@datumlabs/data-connectors';
+import { GraphConnector } from '@/lib/sdk/graph-connector';
 import {
   ALL_POOLS_QUERY,
   RECENT_FLOW_TRANSACTIONS_QUERY,

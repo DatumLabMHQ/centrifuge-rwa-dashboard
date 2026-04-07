@@ -5,8 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ErrorState,
   TuiPanel,
-} from '@datumlabs/dashboard-kit';
-import { formatAddress } from '@datumlabs/data-connectors';
+} from '@/components/sdk';
+import { formatAddress } from '@/lib/sdk/helpers';
 import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { PoolRow, PoolsData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';

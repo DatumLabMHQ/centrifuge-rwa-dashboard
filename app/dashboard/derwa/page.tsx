@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
 } from 'recharts';
-import { ErrorState, TuiPanel } from '@datumlabs/dashboard-kit';
+import { ErrorState, TuiPanel } from '@/components/sdk';
 import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { DerwaData, DerwaWrapperRow } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';

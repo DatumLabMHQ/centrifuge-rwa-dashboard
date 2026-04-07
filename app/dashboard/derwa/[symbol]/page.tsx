@@ -13,8 +13,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ErrorState, TuiPanel } from '@datumlabs/dashboard-kit';
-import { formatAddress } from '@datumlabs/data-connectors';
+import { ErrorState, TuiPanel } from '@/components/sdk';
+import { formatAddress } from '@/lib/sdk/helpers';
 import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';

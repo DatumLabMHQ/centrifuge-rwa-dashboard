@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { globalCache } from '@datumlabs/data-connectors';
+import { globalCache } from '@/lib/sdk/cache';
 import { getTopPositions } from '@/lib/data/centrifuge';
 import { aggregateInvestors } from '@/lib/data/aggregate';
 import type { InvestorsData } from '@/lib/data/types';
