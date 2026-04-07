@@ -1,0 +1,58 @@
+import { NextResponse } from 'next/server';
+import { globalCache } from '@datumlabs/data-connectors';
+import {
+  getAllPools,
+  getRecentFlowTransactions,
+  getRecentCrossChainTransactions,
+} from '@/lib/data/centrifuge';
+import { aggregateFlow, aggregateCrossChainFlow } from '@/lib/data/aggregate';
+import type { FlowData } from '@/lib/data/types';
+
+const DEFAULT_TTL_S = 300;
+const ALLOWED_DAYS = new Set([7, 30, 90, 365]);
+
+function ttlMs(): number {
+  const raw = process.env.CACHE_TTL_OVERVIEW;
+  const seconds = raw ? Number(raw) : DEFAULT_TTL_S;
+  return (Number.isFinite(seconds) ? seconds : DEFAULT_TTL_S) * 1000;
+}
+
+export async function GET(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const requestedDays = Number(url.searchParams.get('days') ?? '30');
+    const days = ALLOWED_DAYS.has(requestedDays) ? requestedDays : 30;
+
+    const cacheKey = `centrifuge:flow:${days}`;
+    const cached = globalCache.get<FlowData & { crossChain: ReturnType<typeof aggregateCrossChainFlow> }>(
+      cacheKey,
+      ttlMs(),
+    );
+    if (cached) {
+      return NextResponse.json({ ...cached, cached: true });
+    }
+
+    // Cross-chain transfers come from a separate query (TRANSFER_IN/TRANSFER_OUT
+    // events) and are NOT included in the main pool-flow aggregate.
+    const [pools, txs, crossChainTxs] = await Promise.all([
+      getAllPools(200),
+      getRecentFlowTransactions(1000),
+      getRecentCrossChainTransactions(1000),
+    ]);
+
+    const flow = aggregateFlow(pools, txs, days);
+    const crossChain = aggregateCrossChainFlow(pools, crossChainTxs, days);
+
+    const data = { ...flow, crossChain };
+    globalCache.set(cacheKey, data);
+
+    return NextResponse.json({ ...data, cached: false });
+  } catch (err) {
+    console.error('[api/flow] failed', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json(
+      { error: 'Failed to load flow data', detail: message },
+      { status: 502 },
+    );
+  }
+}

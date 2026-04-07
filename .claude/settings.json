@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "herd-mcp": {
+      "transport": "http",
+      "url": "https://mcp.herd.eco/v1",
+      "description": "Crypto block explorer for research (Phase 1) and validation (Phase 4)"
+    }
+  }
+}
