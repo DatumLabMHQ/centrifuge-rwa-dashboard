@@ -69,8 +69,9 @@ const DERWA_CONTEXT: DerwaContext[] = [
         protocol: 'Morpho',
         kind: 'lending',
         chain: 'Base',
-        url: 'https://app.morpho.org/base',
-        status: 'announced',
+        address: '0x4440abd9eff38ebf76b8f64c074682acef8c89e77555075478a7582883206604',
+        url: 'https://app.morpho.org/base/market/0x4440abd9eff38ebf76b8f64c074682acef8c89e77555075478a7582883206604/despxa-usdc',
+        status: 'live',
       },
       {
         protocol: 'Euler',
