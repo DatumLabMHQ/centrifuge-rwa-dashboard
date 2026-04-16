@@ -225,6 +225,21 @@ export interface ChainHolderRow {
  * Detailed wrapper payload — richer than `DerwaWrapperRow`. Returned by
  * `/api/derwa/[symbol]` and consumed by the per-wrapper detail page.
  */
+/** Live Morpho lending market stats — null if no Morpho integration or fetch failed. */
+export interface MorphoMarketData {
+  marketId: string;
+  collateralSymbol: string;
+  loanSymbol: string;
+  supplyUsd: number;
+  borrowUsd: number;
+  utilization: number;
+  supplyApy: number;
+  borrowApy: number;
+  lltv: number;
+  fee: number;
+  marketUrl: string;
+}
+
 export interface DerwaDetailData {
   wrapper: DerwaWrapperRow;
   /** Top 25 holders instead of top 5. */
@@ -242,6 +257,8 @@ export interface DerwaDetailData {
     url?: string;
     status: 'live' | 'announced' | 'planned';
   }>;
+  /** Live Morpho market stats — null if no Morpho market or fetch failed. */
+  morpho: MorphoMarketData | null;
   windowDays: number;
   lastUpdated: string;
 }

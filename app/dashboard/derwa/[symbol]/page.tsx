@@ -541,6 +541,104 @@ export default function DerwaDetailPage() {
         })()
       )}
 
+      {/* ─── Morpho lending market ─── */}
+      {data?.morpho && (
+        <TuiPanel
+          title="MORPHO LENDING MARKET"
+          badge={`${data.morpho.collateralSymbol} / ${data.morpho.loanSymbol} · Base · live`}
+        >
+          <div className="px-4 pb-4 pt-2 space-y-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <div className="counter-label">Supply</div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>
+                  {formatCurrency(data.morpho.supplyUsd)}
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  {data.morpho.loanSymbol} deposited
+                </div>
+              </div>
+              <div>
+                <div className="counter-label">Borrow</div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>
+                  {formatCurrency(data.morpho.borrowUsd)}
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  Against {data.morpho.collateralSymbol}
+                </div>
+              </div>
+              <div>
+                <div className="counter-label">Utilization</div>
+                <div style={{ fontWeight: 700, fontSize: 18, color: data.morpho.utilization > 0.9 ? 'var(--accent-red)' : data.morpho.utilization > 0.7 ? 'var(--accent-yellow)' : 'var(--foreground)' }}>
+                  {(data.morpho.utilization * 100).toFixed(1)}%
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  {data.morpho.utilization > 0.9 ? 'Very high' : data.morpho.utilization > 0.7 ? 'Moderate' : 'Healthy'}
+                </div>
+              </div>
+              <div>
+                <div className="counter-label">LLTV</div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>
+                  {(data.morpho.lltv * 100).toFixed(0)}%
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  Liquidation threshold
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div
+                className="rounded p-4"
+                style={{
+                  background: 'var(--accent-green-soft)',
+                  border: '1px solid var(--accent-green)',
+                }}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--accent-green)' }}>
+                  Supply APY
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-green)' }}>
+                  {(data.morpho.supplyApy * 100).toFixed(2)}%
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--accent-green)' }}>
+                  Earn by depositing {data.morpho.loanSymbol}
+                </div>
+              </div>
+              <div
+                className="rounded p-4"
+                style={{
+                  background: 'var(--accent-red-soft)',
+                  border: '1px solid var(--accent-red)',
+                }}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--accent-red)' }}>
+                  Borrow APY
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-red)' }}>
+                  {(data.morpho.borrowApy * 100).toFixed(2)}%
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--accent-red)' }}>
+                  Cost to borrow against {data.morpho.collateralSymbol}
+                </div>
+              </div>
+            </div>
+
+            {data.morpho.marketUrl && (
+              <a
+                href={data.morpho.marketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-[11px] font-semibold hover:underline"
+                style={{ color: 'var(--accent-blue)' }}
+              >
+                Open market on Morpho →
+              </a>
+            )}
+          </div>
+        </TuiPanel>
+      )}
+
       {/* ─── DEX panel + Integrations ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>

@@ -378,6 +378,7 @@ export function aggregateDerwaDetail(
     recentTransactions: recentTransactions.slice(0, 50),
     chainHolders,
     integrations,
+    morpho: null, // populated by the API route from the Morpho GraphQL API
     windowDays: input.windowDays,
     lastUpdated: new Date().toISOString(),
   };

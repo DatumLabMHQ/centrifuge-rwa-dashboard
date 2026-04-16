@@ -7,9 +7,10 @@ import {
   getTopPositions,
 } from '@/lib/data/centrifuge';
 import { getManyDexPoolStats } from '@/lib/data/geckoterminal';
+import { getMorphoMarketStats } from '@/lib/data/morpho';
 import { aggregateDerwaDetail } from '@/lib/data/derwa-aggregate';
 import { getDerwaContext } from '@/lib/data/derwa-context';
-import type { DerwaDetailData } from '@/lib/data/types';
+import type { DerwaDetailData, MorphoMarketData } from '@/lib/data/types';
 
 const DEFAULT_TTL_S = 300;
 const ALLOWED_DAYS = new Set([7, 30, 90, 365]);
@@ -101,8 +102,37 @@ export async function GET(
       return NextResponse.json({ error: 'Wrapper not found in live data' }, { status: 404 });
     }
 
-    globalCache.set(cacheKey, data);
-    return NextResponse.json({ ...data, cached: false });
+    // Fetch live Morpho market stats if this wrapper has a LIVE lending
+    // integration on Morpho. Best-effort — null on failure.
+    let morpho: MorphoMarketData | null = null;
+    const ctx = getDerwaContext(symbol);
+    const morphoIntegration = ctx?.integrations.find(
+      (i) => i.kind === 'lending' && i.protocol === 'Morpho' && i.status === 'live' && i.address,
+    );
+    if (morphoIntegration?.address) {
+      const chainId =
+        morphoIntegration.chain?.toLowerCase() === 'base' ? 8453 : 1;
+      const stats = await getMorphoMarketStats(morphoIntegration.address, chainId);
+      if (stats) {
+        morpho = {
+          marketId: stats.marketId,
+          collateralSymbol: stats.collateralSymbol,
+          loanSymbol: stats.loanSymbol,
+          supplyUsd: stats.supplyUsd,
+          borrowUsd: stats.borrowUsd,
+          utilization: stats.utilization,
+          supplyApy: stats.supplyApy,
+          borrowApy: stats.borrowApy,
+          lltv: stats.lltv,
+          fee: stats.fee,
+          marketUrl: morphoIntegration.url ?? '',
+        };
+      }
+    }
+
+    const enriched = { ...data, morpho };
+    globalCache.set(cacheKey, enriched);
+    return NextResponse.json({ ...enriched, cached: false });
   } catch (err) {
     console.error('[api/derwa/[symbol]] failed', err);
     const message = err instanceof Error ? err.message : 'Unknown error';
