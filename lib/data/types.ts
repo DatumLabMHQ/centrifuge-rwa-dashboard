@@ -179,11 +179,12 @@ export interface DerwaWrapperRow {
   /** Historical TVL series (within the active window). */
   sparkline: Array<{ t: number; tvl: number }>;
 
-  /** DEX pool stats — sourced from DefiLlama yields API. Null if no known pool. */
+  /** DEX pool stats — sourced from DefiLlama yields + GeckoTerminal. */
   dex: {
     network: string;
-    address: string;
-    poolId: string;
+    address: string;        // the actual pool (trading venue)
+    gaugeAddress: string;   // the gauge (staking for rewards)
+    poolId: string;         // DefiLlama pool ID
     project: string;
     symbol: string;
     tvlUsd: number;
@@ -192,6 +193,8 @@ export interface DerwaWrapperRow {
     apyReward: number | null;
     volume1dUsd: number | null;
     volume7dUsd: number | null;
+    /** Live trade price from GeckoTerminal. Null if not available. */
+    priceUsd: number | null;
     /** (dexPrice - NAV) / NAV * 100. Null if no dex price available. */
     premiumPct: number | null;
   } | null;

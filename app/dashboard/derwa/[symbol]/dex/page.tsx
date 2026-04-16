@@ -63,7 +63,12 @@ export default function DexSubPage() {
             <MetricTile label="Pool TVL" value={formatCurrency(dex.tvlUsd)} sub="Total value locked" />
             <MetricTile label="Total APY" value={`${dex.apy.toFixed(2)}%`} color="green" sub="Combined yield" />
             <MetricTile label="24h Volume" value={dex.volume1dUsd != null ? formatCurrency(dex.volume1dUsd) : '—'} sub="Trading volume" />
-            <MetricTile label="7d Volume" value={dex.volume7dUsd != null ? formatCurrency(dex.volume7dUsd) : '—'} sub="Weekly volume" />
+            <MetricTile
+              label="Premium / Discount"
+              value={dex.premiumPct != null ? `${dex.premiumPct >= 0 ? '+' : ''}${dex.premiumPct.toFixed(2)}%` : '—'}
+              sub={dex.priceUsd != null ? `DEX $${dex.priceUsd.toFixed(2)} vs NAV $${w!.navUsd.toFixed(2)}` : 'No trade price'}
+              color={dex.premiumPct != null ? (dex.premiumPct > 0 ? 'green' : 'red') : undefined}
+            />
           </div>
 
           {/* APY breakdown */}
@@ -169,11 +174,12 @@ export default function DexSubPage() {
   );
 }
 
-function MetricTile({ label, value, sub, color }: { label: string; value: string; sub: string; color?: 'green' }) {
+function MetricTile({ label, value, sub, color }: { label: string; value: string; sub: string; color?: 'green' | 'red' }) {
+  const clr = color === 'green' ? 'var(--accent-green)' : color === 'red' ? 'var(--accent-red)' : undefined;
   return (
     <div className="rounded px-3 py-2.5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
       <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}</div>
-      <div className="text-[16px] font-bold mt-0.5" style={{ color: color === 'green' ? 'var(--accent-green)' : undefined, lineHeight: 1.2 }}>{value}</div>
+      <div className="text-[16px] font-bold mt-0.5" style={{ color: clr, lineHeight: 1.2 }}>{value}</div>
       <div className="text-[9px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{sub}</div>
     </div>
   );

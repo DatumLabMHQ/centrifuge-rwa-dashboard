@@ -26,6 +26,7 @@ import {
 import { getDerwaContext } from '@/lib/data/derwa-context';
 import type { TokenSnapshot } from '@/lib/data/centrifuge';
 import type { DefiLlamaPool } from '@/lib/data/defillama-yields';
+import type { GeckoPoolStats } from '@/lib/data/geckoterminal';
 
 /* ─── BigInt helpers (copied from aggregate.ts so derwa is self-contained) ── */
 
@@ -64,17 +65,20 @@ export interface AggregateDerwaInput {
   snapshotsBySymbol: Map<string, TokenSnapshot[]>;
   /** Map of `defiLlamaPoolId → pool stats`. */
   dexPools: Map<string, DefiLlamaPool | null>;
+  /** Map of `poolAddress (lowercase) → GeckoTerminal stats` for live price. */
+  geckoStats: Map<string, GeckoPoolStats | null>;
   windowDays: number;
 }
 
-export function aggregateDerwa({
-  pools,
-  transactions,
-  positions,
-  snapshotsBySymbol,
-  dexPools,
-  windowDays,
-}: AggregateDerwaInput): DerwaData {
+export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
+  const {
+    pools,
+    transactions,
+    positions,
+    snapshotsBySymbol,
+    dexPools,
+    windowDays,
+  } = input;
   const cutoff = Date.now() - windowDays * 24 * 60 * 60 * 1000;
 
   // Build symbol → pool index for both wrappers and institutional pools.
@@ -172,18 +176,23 @@ export function aggregateDerwa({
     const snapshots = snapshotsBySymbol.get(sym) ?? [];
     const sparkline = buildSparkline(snapshots, token.decimals, cutoff);
 
-    // DEX stats — pull from DefiLlama yields API using the pool ID in the context.
+    // DEX stats — merge DefiLlama (TVL, APY) + GeckoTerminal (live price).
     const dexIntegration = ctx.integrations.find(
       (i) => i.kind === 'dex' && i.status === 'live' && i.defiLlamaPoolId,
     );
     const llamaPool = dexIntegration?.defiLlamaPoolId
       ? dexPools.get(dexIntegration.defiLlamaPoolId)
       : undefined;
+    const geckoPool = dexIntegration?.address
+      ? input.geckoStats.get(dexIntegration.address.toLowerCase())
+      : undefined;
+    const dexPrice = geckoPool?.priceUsd ?? null;
     const dex =
       dexIntegration && llamaPool
         ? {
             network: dexIntegration.chain?.toLowerCase() ?? 'base',
             address: dexIntegration.address ?? '',
+            gaugeAddress: dexIntegration.gaugeAddress ?? '',
             poolId: llamaPool.poolId,
             project: llamaPool.project,
             symbol: llamaPool.symbol,
@@ -193,7 +202,11 @@ export function aggregateDerwa({
             apyReward: llamaPool.apyReward,
             volume1dUsd: llamaPool.volumeUsd1d,
             volume7dUsd: llamaPool.volumeUsd7d,
-            premiumPct: null, // can't compute without a trade price
+            priceUsd: dexPrice,
+            premiumPct:
+              dexPrice != null && navUsd > 0
+                ? ((dexPrice - navUsd) / navUsd) * 100
+                : null,
           }
         : null;
 

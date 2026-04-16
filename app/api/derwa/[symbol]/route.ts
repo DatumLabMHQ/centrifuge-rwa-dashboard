@@ -7,6 +7,7 @@ import {
   getTopPositions,
 } from '@/lib/data/centrifuge';
 import { getDefiLlamaPool } from '@/lib/data/defillama-yields';
+import { getDexPoolStats } from '@/lib/data/geckoterminal';
 import { getMorphoMarketStats } from '@/lib/data/morpho';
 import { aggregateDerwaDetail } from '@/lib/data/derwa-aggregate';
 import { getDerwaContext } from '@/lib/data/derwa-context';
@@ -87,12 +88,26 @@ export async function GET(
       }
     }
 
+    // GeckoTerminal for live trade price
+    const geckoStats = new Map<string, Awaited<ReturnType<typeof getDexPoolStats>>>();
+    for (const sym of WRAPPER_SYMBOLS) {
+      const ctx = getDerwaContext(sym);
+      if (!ctx) continue;
+      for (const i of ctx.integrations) {
+        if (i.kind === 'dex' && i.status === 'live' && i.address) {
+          const stats = await getDexPoolStats('base', i.address);
+          geckoStats.set(i.address.toLowerCase(), stats);
+        }
+      }
+    }
+
     const data = aggregateDerwaDetail({
       pools,
       transactions,
       positions,
       snapshotsBySymbol,
       dexPools,
+      geckoStats,
       windowDays: days,
       symbol,
     });

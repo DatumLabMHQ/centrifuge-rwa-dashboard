@@ -16,6 +16,8 @@ export interface DerwaIntegration {
   status: 'live' | 'announced' | 'planned';
   /** DefiLlama yield pool ID — used to pull TVL, APY, volume for DEX pools. */
   defiLlamaPoolId?: string;
+  /** Gauge address for Aerodrome rewards staking. */
+  gaugeAddress?: string;
 }
 
 export interface DerwaContext {
@@ -47,10 +49,13 @@ const DERWA_CONTEXT: DerwaContext[] = [
         protocol: 'Aerodrome',
         kind: 'dex',
         chain: 'Base',
-        address: '0x0fb1DAFCC2bD0bc30477bA7B96B2e8045ADd8a03',
+        /** The actual trading pool (NOT the gauge 0x0fb1...) */
+        address: '0xf840346fafedc1c0466216f3a899a599e6d03e75',
+        /** The gauge contract (for AERO rewards staking) */
+        gaugeAddress: '0x0fb1DAFCC2bD0bc30477bA7B96B2e8045ADd8a03',
         url: 'https://aerodrome.finance',
         status: 'live',
-        /** DefiLlama yield pool ID for the active USDC/deSPXA CL50 pool. */
+        /** DefiLlama yield pool ID for APY breakdown. */
         defiLlamaPoolId: 'f331d86f-6aae-4576-8f4d-d24f9bc2f883',
       },
       {
