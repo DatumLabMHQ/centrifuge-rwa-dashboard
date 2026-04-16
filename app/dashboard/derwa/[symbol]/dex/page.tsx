@@ -45,7 +45,7 @@ export default function DexSubPage() {
 
       <PageHeader
         title="DEX & Pricing"
-        subtitle={dex ? `Aerodrome ${symbol} / USDC pool on ${dex.network}` : 'Loading market data…'}
+        subtitle={dex ? `${dex.project} · ${dex.symbol} · ${dex.network}` : 'Loading market data…'}
       />
 
       {!w ? (
@@ -53,84 +53,128 @@ export default function DexSubPage() {
       ) : !dex ? (
         <TuiPanel title="NO DEX DATA">
           <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-            No live DEX integration with a known pool address for {symbol} yet.
+            No live DEX integration with tracked pool data for {symbol} yet.
           </div>
         </TuiPanel>
       ) : (
         <>
           {/* Metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricTile label="DEX Price" value={dex.priceUsd != null ? `$${dex.priceUsd.toFixed(4)}` : '—'} sub="Last trade price" />
-            <MetricTile label="NAV" value={`$${w.navUsd.toFixed(4)}`} sub="Centrifuge oracle price" />
-            <MetricTile
-              label="Premium / Discount"
-              value={dex.premiumPct != null ? `${dex.premiumPct >= 0 ? '+' : ''}${dex.premiumPct.toFixed(2)}%` : '—'}
-              sub={dex.premiumPct != null ? (dex.premiumPct >= 0 ? 'Trading above NAV' : 'Trading below NAV') : 'No trades'}
-              color={dex.premiumPct == null ? undefined : dex.premiumPct > 0 ? 'green' : 'red'}
-            />
-            <MetricTile label="24h Volume" value={formatCurrency(dex.volume24hUsd)} sub="Trading volume" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <MetricTile label="Pool TVL" value={formatCurrency(dex.tvlUsd)} sub="Total value locked" />
+            <MetricTile label="Total APY" value={`${dex.apy.toFixed(2)}%`} color="green" sub="Combined yield" />
+            <MetricTile label="24h Volume" value={dex.volume1dUsd != null ? formatCurrency(dex.volume1dUsd) : '—'} sub="Trading volume" />
+            <MetricTile label="7d Volume" value={dex.volume7dUsd != null ? formatCurrency(dex.volume7dUsd) : '—'} sub="Weekly volume" />
           </div>
 
-          {/* Liquidity + pool details */}
+          {/* APY breakdown */}
+          <TuiPanel title="APY BREAKDOWN" badge="Where the yield comes from">
+            <div className="px-4 pb-4 pt-2 space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <div className="counter-label">Total APY</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-green)' }}>
+                    {dex.apy.toFixed(2)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="counter-label">Base (Trading Fees)</div>
+                  <div style={{ fontSize: 24, fontWeight: 700 }}>
+                    {dex.apyBase != null ? `${dex.apyBase.toFixed(2)}%` : '—'}
+                  </div>
+                  <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    Organic yield from swap fees
+                  </div>
+                </div>
+                <div>
+                  <div className="counter-label">Reward (AERO Incentives)</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-blue)' }}>
+                    {dex.apyReward != null ? `${dex.apyReward.toFixed(2)}%` : '—'}
+                  </div>
+                  <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    Aerodrome token emissions
+                  </div>
+                </div>
+              </div>
+
+              {/* Yield composition bar */}
+              {dex.apyBase != null && dex.apyReward != null && dex.apy > 0 && (
+                <div>
+                  <div className="flex rounded overflow-hidden" style={{ height: 12 }}>
+                    <div
+                      style={{
+                        width: `${(dex.apyBase / dex.apy) * 100}%`,
+                        background: 'var(--foreground)',
+                      }}
+                    />
+                    <div
+                      style={{
+                        width: `${(dex.apyReward / dex.apy) * 100}%`,
+                        background: 'var(--accent-blue)',
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1 text-[9px]" style={{ color: 'var(--text-muted)' }}>
+                    <span>Trading fees: {((dex.apyBase / dex.apy) * 100).toFixed(1)}%</span>
+                    <span>AERO rewards: {((dex.apyReward / dex.apy) * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+              )}
+
+              {dex.apyReward != null && dex.apyBase != null && dex.apyReward > dex.apyBase * 5 && (
+                <div
+                  className="rounded p-3 text-[11px]"
+                  style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)' }}
+                >
+                  <strong>Note:</strong> {((dex.apyReward / dex.apy) * 100).toFixed(0)}% of this
+                  APY comes from AERO incentive emissions, not organic trading fees. If Aerodrome
+                  reduces or ends emissions to this pool, the effective yield would drop to
+                  ~{dex.apyBase.toFixed(2)}%.
+                </div>
+              )}
+            </div>
+          </TuiPanel>
+
+          {/* Pool details */}
           <TuiPanel title="POOL DETAILS" noPadding>
             <div className="overflow-x-auto">
               <table className="data-table">
                 <tbody>
                   <tr>
-                    <td style={{ fontWeight: 600, color: 'var(--text-muted)', width: 200 }}>Pool</td>
-                    <td>deSPXA / USDC 0.3% (Concentrated Liquidity)</td>
+                    <td style={{ fontWeight: 600, color: 'var(--text-muted)', width: 180 }}>Pool</td>
+                    <td>{dex.symbol}</td>
                   </tr>
                   <tr>
                     <td style={{ fontWeight: 600, color: 'var(--text-muted)' }}>DEX</td>
-                    <td>Aerodrome (SlipStream)</td>
+                    <td>{dex.project} (SlipStream CL50)</td>
                   </tr>
                   <tr>
                     <td style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Chain</td>
                     <td><span className={`chain-badge ${dex.network}`}>{dex.network}</span></td>
                   </tr>
                   <tr>
-                    <td style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Liquidity</td>
-                    <td style={{ fontWeight: 700 }}>{formatCurrency(dex.liquidityUsd)}</td>
-                  </tr>
-                  <tr>
                     <td style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Pool Address</td>
                     <td className="font-mono">{formatAddress(dex.address)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Data Source</td>
+                    <td>DefiLlama Yields API</td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </TuiPanel>
-
-          {/* Context */}
-          {dex.liquidityUsd < 1000 && (
-            <div
-              className="rounded-lg p-4 text-[11px]"
-              style={{ background: 'var(--accent-red-soft)', border: '1px solid var(--accent-red)', color: 'var(--accent-red)' }}
-            >
-              <strong>Low liquidity warning:</strong> This pool has {formatCurrency(dex.liquidityUsd)} in reserves.
-              The premium/discount vs NAV ({dex.premiumPct?.toFixed(2)}%) is not actionable — any
-              trade would move the price significantly. Wait for more liquidity before using this
-              pool for price discovery.
-            </div>
-          )}
         </>
       )}
     </div>
   );
 }
 
-function MetricTile({
-  label, value, sub, color,
-}: {
-  label: string; value: string; sub: string;
-  color?: 'green' | 'red';
-}) {
-  const clr = color === 'green' ? 'var(--accent-green)' : color === 'red' ? 'var(--accent-red)' : undefined;
+function MetricTile({ label, value, sub, color }: { label: string; value: string; sub: string; color?: 'green' }) {
   return (
-    <div className="rounded p-4" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-      <div className="counter-label">{label}</div>
-      <div className="text-[22px] font-bold" style={{ color: clr, lineHeight: 1.2 }}>{value}</div>
-      <div className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{sub}</div>
+    <div className="rounded px-3 py-2.5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+      <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}</div>
+      <div className="text-[16px] font-bold mt-0.5" style={{ color: color === 'green' ? 'var(--accent-green)' : undefined, lineHeight: 1.2 }}>{value}</div>
+      <div className="text-[9px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{sub}</div>
     </div>
   );
 }

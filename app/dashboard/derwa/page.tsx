@@ -253,7 +253,7 @@ function ComparisonRow({
       </td>
       <td className="text-right">
         {w.dex ? (
-          formatCurrency(w.dex.volume24hUsd)
+          w.dex.volume1dUsd != null ? formatCurrency(w.dex.volume1dUsd) : '—'
         ) : (
           <span style={{ color: 'var(--text-muted)' }}>—</span>
         )}

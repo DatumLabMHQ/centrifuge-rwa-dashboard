@@ -6,7 +6,7 @@ import {
   getTokenSnapshots,
   getTopPositions,
 } from '@/lib/data/centrifuge';
-import { getManyDexPoolStats } from '@/lib/data/geckoterminal';
+import { getDefiLlamaPool } from '@/lib/data/defillama-yields';
 import { aggregateDerwa } from '@/lib/data/derwa-aggregate';
 import { getDerwaContext } from '@/lib/data/derwa-context';
 import type { DerwaData } from '@/lib/data/types';
@@ -33,21 +33,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ ...cached, cached: true });
     }
 
-    // ─── Pull pools, transactions, positions in parallel ───
     const [pools, transactions, positions] = await Promise.all([
       getAllPools(200),
       getRecentFlowTransactions(1000),
       getTopPositions(1000),
     ]);
 
-    // ─── Resolve token IDs for the wrappers we care about, then fetch
-    //     per-token snapshots in parallel ───
-    const wrapperTokenMap = new Map<string, string>(); // symbol → tokenId
+    // Snapshots per wrapper
+    const wrapperTokenMap = new Map<string, string>();
     for (const p of pools) {
       const t = p.tokens.items.find((tok) => WRAPPER_SYMBOLS.includes(tok.symbol));
       if (t) wrapperTokenMap.set(t.symbol, t.id);
     }
-
     const snapshotResults = await Promise.all(
       Array.from(wrapperTokenMap.entries()).map(async ([sym, tokenId]) => {
         const snaps = await getTokenSnapshots(tokenId, 1000);
@@ -56,29 +53,25 @@ export async function GET(request: Request) {
     );
     const snapshotsBySymbol = new Map(snapshotResults);
 
-    // ─── Pull DEX stats from GeckoTerminal for any wrapper that has a known
-    //     LIVE DEX integration with an address ───
-    const dexFetches: Array<{ network: string; address: string }> = [];
+    // DEX pools from DefiLlama yields API
+    const dexPools = new Map<string, Awaited<ReturnType<typeof getDefiLlamaPool>>>();
     for (const sym of WRAPPER_SYMBOLS) {
       const ctx = getDerwaContext(sym);
       if (!ctx) continue;
       for (const i of ctx.integrations) {
-        if (i.kind === 'dex' && i.status === 'live' && i.address && i.chain) {
-          dexFetches.push({
-            network: i.chain.toLowerCase(),
-            address: i.address,
-          });
+        if (i.kind === 'dex' && i.status === 'live' && i.defiLlamaPoolId) {
+          const pool = await getDefiLlamaPool(i.defiLlamaPoolId);
+          dexPools.set(i.defiLlamaPoolId, pool);
         }
       }
     }
-    const dexStats = await getManyDexPoolStats(dexFetches);
 
     const data = aggregateDerwa({
       pools,
       transactions,
       positions,
       snapshotsBySymbol,
-      dexStats,
+      dexPools,
       windowDays: days,
     });
 

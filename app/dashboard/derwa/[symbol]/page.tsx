@@ -282,20 +282,22 @@ export default function DerwaDetailPage() {
               <div>
                 <div className="text-[12px] font-bold">Aerodrome</div>
                 <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  deSPXA / USDC · {w.dex.network}
+                  {w.dex.symbol} · {w.dex.network}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-6 text-[11px]">
               <div className="text-right">
-                <div className="font-bold">{formatCurrency(w.dex.liquidityUsd)}</div>
-                <div style={{ color: 'var(--text-muted)' }}>liquidity</div>
+                <div className="font-bold">{formatCurrency(w.dex.tvlUsd)}</div>
+                <div style={{ color: 'var(--text-muted)' }}>TVL</div>
               </div>
               <div className="text-right">
-                <div className={`font-bold ${w.dex.premiumPct != null ? (w.dex.premiumPct > 0 ? 'num-positive' : 'num-negative') : 'num-neutral'}`}>
-                  {w.dex.premiumPct != null ? `${w.dex.premiumPct >= 0 ? '+' : ''}${w.dex.premiumPct.toFixed(2)}%` : '—'}
-                </div>
-                <div style={{ color: 'var(--text-muted)' }}>vs NAV</div>
+                <div className="font-bold num-positive">{w.dex.apy.toFixed(2)}%</div>
+                <div style={{ color: 'var(--text-muted)' }}>APY</div>
+              </div>
+              <div className="text-right">
+                <div className="font-bold">{w.dex.volume1dUsd != null ? formatCurrency(w.dex.volume1dUsd) : '—'}</div>
+                <div style={{ color: 'var(--text-muted)' }}>24h vol</div>
               </div>
               <StatusPill status="live" />
               <span style={{ color: 'var(--text-muted)' }}>›</span>

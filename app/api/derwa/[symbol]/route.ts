@@ -6,7 +6,7 @@ import {
   getTokenSnapshots,
   getTopPositions,
 } from '@/lib/data/centrifuge';
-import { getManyDexPoolStats } from '@/lib/data/geckoterminal';
+import { getDefiLlamaPool } from '@/lib/data/defillama-yields';
 import { getMorphoMarketStats } from '@/lib/data/morpho';
 import { aggregateDerwaDetail } from '@/lib/data/derwa-aggregate';
 import { getDerwaContext } from '@/lib/data/derwa-context';
@@ -74,26 +74,25 @@ export async function GET(
     );
     const snapshotsBySymbol = new Map(snapshotResults);
 
-    // GeckoTerminal stats (only for the wrapper we care about, but we
-    // include all 4 because the cache may be reused)
-    const dexFetches: Array<{ network: string; address: string }> = [];
+    // DEX pools from DefiLlama yields API
+    const dexPools = new Map<string, Awaited<ReturnType<typeof getDefiLlamaPool>>>();
     for (const sym of WRAPPER_SYMBOLS) {
       const ctx = getDerwaContext(sym);
       if (!ctx) continue;
       for (const i of ctx.integrations) {
-        if (i.kind === 'dex' && i.status === 'live' && i.address && i.chain) {
-          dexFetches.push({ network: i.chain.toLowerCase(), address: i.address });
+        if (i.kind === 'dex' && i.status === 'live' && i.defiLlamaPoolId) {
+          const pool = await getDefiLlamaPool(i.defiLlamaPoolId);
+          dexPools.set(i.defiLlamaPoolId, pool);
         }
       }
     }
-    const dexStats = await getManyDexPoolStats(dexFetches);
 
     const data = aggregateDerwaDetail({
       pools,
       transactions,
       positions,
       snapshotsBySymbol,
-      dexStats,
+      dexPools,
       windowDays: days,
       symbol,
     });
