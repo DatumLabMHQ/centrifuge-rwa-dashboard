@@ -103,12 +103,12 @@ export default function MorphoSubPage() {
             className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3 rounded-lg text-[11px]"
             style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
           >
-            <Stat label="Supply" value={formatCurrency(m.supplyUsd)} />
+            <Stat label="Market Size" value={formatCurrency(m.sizeUsd)} />
+            <Stat label="Total Liquidity" value={formatCurrency(m.totalLiquidityUsd)} />
+            <Stat label="Direct Supply" value={formatCurrency(m.supplyUsd)} />
             <Stat label="Borrow" value={formatCurrency(m.borrowUsd)} />
             <Stat label="Utilization" value={`${(m.utilization * 100).toFixed(1)}%`} color={m.utilization > 0.9 ? 'red' : m.utilization > 0.7 ? 'yellow' : 'green'} />
-            <Stat label="Available" value={formatCurrency(m.liquidityUsd)} />
             <Stat label="Collateral" value={formatCurrency(m.collateralUsd)} />
-            <Stat label="Bad Debt" value={m.badDebtUsd > 0 ? formatCurrency(m.badDebtUsd) : '$0'} color={m.badDebtUsd > 0 ? 'red' : 'green'} />
           </div>
 
           {/* ─── Section 2: Compact metrics grid ─── */}
@@ -120,7 +120,7 @@ export default function MorphoSubPage() {
             <CompactMetric label="LLTV" value={`${(m.lltv * 100).toFixed(0)}%`} sub="Max borrow ratio" />
             <CompactMetric label="Bad Debt" value={m.badDebtUsd > 0 ? formatCurrency(m.badDebtUsd) : '$0'} color={m.badDebtUsd === 0 ? 'green' : 'red'} sub="Lifetime" />
             <CompactMetric label="Oracle" value={m.oracleType.replace('OracleV2', ' V2')} sub={`±${(m.dailyPriceVariation * 100).toFixed(2)}%/day`} />
-            <CompactMetric label="Protocol Fee" value={m.fee > 0 ? `${(m.fee * 100).toFixed(2)}%` : 'None'} sub="Morpho take rate" />
+            <CompactMetric label="Available" value={formatCurrency(m.liquidityUsd)} sub={`of ${formatCurrency(m.supplyUsd)} direct`} />
           </div>
 
           {/* ─── Section 3: IRM Curve + APY History (side by side) ─── */}

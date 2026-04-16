@@ -15,10 +15,12 @@ export interface MorphoMarketStats {
   createdAt: number; // unix timestamp
 
   // Current state
-  supplyUsd: number;
-  borrowUsd: number;
+  supplyUsd: number;       // direct supply to this market only
+  borrowUsd: number;       // direct borrows from this market only
   collateralUsd: number;
-  liquidityUsd: number; // available = supply - borrow
+  liquidityUsd: number;    // available = supply - borrow (direct)
+  sizeUsd: number;         // total market size incl. shared vault liquidity (matches Morpho UI)
+  totalLiquidityUsd: number; // total liquidity incl. shared vaults (matches Morpho UI)
   utilization: number;
   supplyApy: number;
   borrowApy: number;
@@ -65,6 +67,8 @@ const FULL_MARKET_QUERY = `
         borrowAssetsUsd
         collateralAssetsUsd
         liquidityAssetsUsd
+        sizeUsd
+        totalLiquidityUsd
         utilization
         supplyApy
         borrowApy
@@ -140,6 +144,8 @@ export async function getMorphoMarketStats(
       borrowUsd,
       collateralUsd,
       liquidityUsd: s.liquidityAssetsUsd ?? 0,
+      sizeUsd: s.sizeUsd ?? 0,
+      totalLiquidityUsd: s.totalLiquidityUsd ?? 0,
       utilization: s.utilization ?? 0,
       supplyApy: s.supplyApy ?? 0,
       borrowApy: s.borrowApy ?? 0,

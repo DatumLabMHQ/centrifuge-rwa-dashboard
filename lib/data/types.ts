@@ -236,6 +236,8 @@ export interface MorphoMarketData {
   borrowUsd: number;
   collateralUsd: number;
   liquidityUsd: number;
+  sizeUsd: number;              // total market size incl. shared vault liquidity
+  totalLiquidityUsd: number;    // total liquidity incl. shared vaults
   utilization: number;
   supplyApy: number;
   borrowApy: number;

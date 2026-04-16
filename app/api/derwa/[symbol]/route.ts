@@ -124,6 +124,8 @@ export async function GET(
           borrowUsd: stats.borrowUsd,
           collateralUsd: stats.collateralUsd,
           liquidityUsd: stats.liquidityUsd,
+          sizeUsd: stats.sizeUsd,
+          totalLiquidityUsd: stats.totalLiquidityUsd,
           utilization: stats.utilization,
           supplyApy: stats.supplyApy,
           borrowApy: stats.borrowApy,
