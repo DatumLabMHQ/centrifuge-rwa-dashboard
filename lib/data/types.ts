@@ -229,15 +229,32 @@ export interface ChainHolderRow {
 export interface MorphoMarketData {
   marketId: string;
   collateralSymbol: string;
+  collateralAddress: string;
   loanSymbol: string;
+  loanAddress: string;
   supplyUsd: number;
   borrowUsd: number;
+  collateralUsd: number;
+  liquidityUsd: number;
   utilization: number;
   supplyApy: number;
   borrowApy: number;
   lltv: number;
   fee: number;
   marketUrl: string;
+  createdAt: number;
+  oracleType: string;
+  oracleAddress: string;
+  dailyPriceVariation: number;
+  badDebtUsd: number;
+  collateralRatio: number;
+  distanceToLiquidation: number;
+  historicalSupplyUsd: Array<{ x: number; y: number }>;
+  historicalBorrowUsd: Array<{ x: number; y: number }>;
+  historicalUtilization: Array<{ x: number; y: number }>;
+  historicalSupplyApy: Array<{ x: number; y: number }>;
+  historicalBorrowApy: Array<{ x: number; y: number }>;
+  irmCurve: Array<{ utilization: number; supplyApy: number; borrowApy: number }>;
 }
 
 export interface DerwaDetailData {
