@@ -1,5 +1,16 @@
 'use client';
 
+/**
+ * deRWA wrapper detail page — focused on answering 3 questions:
+ *   1. "What is this?" — hero metrics (TVL, wrap ratio, holders, premium)
+ *   2. "Should I care?" — TVL trajectory chart + DeFi Activity Card
+ *   3. "Show me details" — links to /morpho, /holders, /dex sub-pages
+ *
+ * Everything else (top 25 holders, recent activity, full DEX panel, full
+ * Morpho panel) lives on dedicated sub-pages so this page fits in one
+ * viewport and has a clear reading path.
+ */
+
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -13,8 +24,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ErrorState, TuiPanel } from '@/components/sdk';
-import { formatAddress } from '@/lib/sdk/helpers';
+import { ErrorState } from '@/components/sdk';
 import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
@@ -29,30 +39,6 @@ const RANGE_DAYS: Record<TimeRange, number> = {
   '365D': 365,
 };
 
-const EXPLORERS: Record<string, string> = {
-  ethereum: 'https://etherscan.io/address/',
-  base: 'https://basescan.org/address/',
-  arbitrum: 'https://arbiscan.io/address/',
-  avalanche: 'https://snowtrace.io/address/',
-  plume: 'https://explorer.plume.org/address/',
-  binance: 'https://bscscan.com/address/',
-  optimism: 'https://optimistic.etherscan.io/address/',
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  live: 'var(--accent-green)',
-  announced: 'var(--accent-yellow)',
-  planned: 'var(--text-muted)',
-};
-
-const KIND_LABEL: Record<string, string> = {
-  dex: 'DEX',
-  oracle: 'ORACLE',
-  lending: 'LENDING',
-  wallet: 'WALLET',
-  cex: 'CEX',
-};
-
 async function fetchDetail(symbol: string, days: number): Promise<DerwaDetailData> {
   const res = await fetch(`/api/derwa/${symbol}?days=${days}`);
   if (!res.ok) {
@@ -62,33 +48,10 @@ async function fetchDetail(symbol: string, days: number): Promise<DerwaDetailDat
   return res.json();
 }
 
-function formatRelative(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.round(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  return `${days}d ago`;
-}
-
-const TX_TYPE_LABEL: Record<string, { label: string; color: string }> = {
-  SYNC_DEPOSIT: { label: 'Deposit', color: 'var(--accent-green)' },
-  DEPOSIT_CLAIMED: { label: 'Deposit Claimed', color: 'var(--accent-green)' },
-  DEPOSIT_REQUEST_EXECUTED: { label: 'Deposit', color: 'var(--accent-green)' },
-  SYNC_REDEEM: { label: 'Redeem', color: 'var(--accent-red)' },
-  REDEEM_CLAIMED: { label: 'Redeem Claimed', color: 'var(--accent-red)' },
-  REDEEM_REQUEST_EXECUTED: { label: 'Redeem', color: 'var(--accent-red)' },
-};
-
-const ROWS_PER_PAGE = 10;
-
 export default function DerwaDetailPage() {
   const params = useParams<{ symbol: string }>();
   const symbol = params?.symbol ?? '';
   const [range, setRange] = useState<TimeRange>('365D');
-  const [holderPage, setHolderPage] = useState(0);
-  const [activityPage, setActivityPage] = useState(0);
   const days = RANGE_DAYS[range];
 
   const detail = useQuery<DerwaDetailData>({
@@ -108,94 +71,97 @@ export default function DerwaDetailPage() {
 
   const data = detail.data;
   const w = data?.wrapper;
+  const morpho = data?.morpho;
 
   return (
     <div className="space-y-6">
+      {/* ─── Breadcrumb ─── */}
       <div className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-        <Link href="/dashboard/derwa" style={{ color: 'var(--accent-orange)' }} className="hover:underline">
+        <Link
+          href="/dashboard/derwa"
+          style={{ color: 'var(--accent-orange)' }}
+          className="hover:underline"
+        >
           ← deRWA Composability
         </Link>
       </div>
 
+      {/* ─── Section 1: Hero ─── */}
       <PageHeader
         title={symbol}
         subtitle={
           w
-            ? `${w.name} · wraps ${w.instSymbol} · managed by ${w.manager}`
-            : 'Loading wrapper detail…'
+            ? `${w.name} · wraps ${w.instSymbol} · ${w.manager}`
+            : 'Loading…'
         }
         right={<TimeSlicer value={range} onChange={setRange} />}
       />
 
-      {/* ─── Hero metrics ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <SummaryTile
-          label="TVL"
-          value={w ? formatCurrency(w.tvlUsd) : '—'}
-          subtitle={w ? `NAV $${w.navUsd.toFixed(4)}` : ''}
-        />
-        <SummaryTile
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <HeroTile label="TVL" value={w ? formatCurrency(w.tvlUsd) : '—'} sub={w ? `NAV $${w.navUsd.toFixed(4)}` : ''} />
+        <HeroTile
           label="Wrap Ratio"
-          value={w?.wrapRatio != null ? `${(w.wrapRatio * 100).toFixed(2)}%` : '—'}
-          subtitle={
-            w?.instTvlUsd != null
-              ? `of ${formatCurrency(w.instTvlUsd)} ${w.instSymbol}`
-              : 'no inst pool'
-          }
-          colorClass="text-orange"
+          value={w?.wrapRatio != null ? `${(w.wrapRatio * 100).toFixed(1)}%` : '—'}
+          sub={w?.instTvlUsd != null ? `of ${formatCurrency(w.instTvlUsd)} ${w.instSymbol}` : ''}
+          color="orange"
         />
-        <SummaryTile
+        <HeroTile
           label="Holders"
           value={w ? String(w.holderCount) : '—'}
-          subtitle="Distinct wallets"
+          sub="Distinct wallets"
+          href={`/dashboard/derwa/${symbol}/holders`}
         />
-        <SummaryTile
+        <HeroTile
           label={`${range} Flow`}
           value={w ? formatCurrencySigned(w.flowUsd) : '—'}
-          subtitle="Net deposits − redemptions"
-          colorClass={
-            w && w.flowUsd > 0
-              ? 'text-green'
-              : w && w.flowUsd < 0
-                ? 'text-red'
-                : undefined
-          }
-        />
-        <SummaryTile
-          label="DEX Premium"
-          value={
-            w?.dex?.premiumPct == null
-              ? '—'
-              : `${w.dex.premiumPct >= 0 ? '+' : ''}${w.dex.premiumPct.toFixed(2)}%`
-          }
-          subtitle={w?.dex ? `vs NAV on ${w.dex.network}` : 'no DEX integration'}
-          colorClass={
-            w?.dex?.premiumPct == null
-              ? undefined
-              : w.dex.premiumPct > 0
-                ? 'text-green'
-                : 'text-red'
-          }
+          sub="Net deposits − redemptions"
+          color={w && w.flowUsd > 0 ? 'green' : w && w.flowUsd < 0 ? 'red' : undefined}
         />
       </div>
 
-      {/* ─── Main TVL chart ─── */}
+      {/* ─── Wrap ratio bar (compact) ─── */}
+      {w?.wrapRatio != null && (
+        <div
+          className="flex items-center gap-4 p-4 rounded"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <span className="text-[11px] font-bold" style={{ color: 'var(--text-muted)', minWidth: 80 }}>
+            WRAP RATIO
+          </span>
+          <div
+            style={{
+              flex: 1,
+              height: 10,
+              background: 'var(--border)',
+              borderRadius: 4,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.min(100, w.wrapRatio * 100)}%`,
+                height: '100%',
+                background: 'var(--accent-orange)',
+              }}
+            />
+          </div>
+          <span className="text-[12px] font-bold" style={{ color: 'var(--accent-orange)', minWidth: 70, textAlign: 'right' }}>
+            {(w.wrapRatio * 100).toFixed(2)}%
+          </span>
+          <span className="text-[10px]" style={{ color: 'var(--text-muted)', minWidth: 140 }}>
+            {formatCurrency(w.tvlUsd)} of {formatCurrency(w.instTvlUsd ?? 0)}
+          </span>
+        </div>
+      )}
+
+      {/* ─── Section 2: TVL trajectory ─── */}
       {!w ? (
         <PanelSkeleton height="h-72" label="TVL trajectory" />
-      ) : w.sparkline.length < 2 ? (
-        <TuiPanel title="TVL TRAJECTORY" badge="No snapshot data">
-          <div
-            className="h-56 flex items-center justify-center"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            Not enough snapshot history in this window.
-          </div>
-        </TuiPanel>
-      ) : (
+      ) : w.sparkline.length < 2 ? null : (
         <ChartPanel
           title="TVL TRAJECTORY"
           badge={`${w.sparkline.length} snapshots over ${range.toLowerCase()}`}
-          height="h-72"
+          height="h-64"
         >
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={w.sparkline} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -233,654 +199,235 @@ export default function DerwaDetailPage() {
                   fontSize: 11,
                   boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
                 }}
-                labelFormatter={(v) => {
-                  const d = new Date(Number(v));
-                  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-                }}
+                labelFormatter={(v) => new Date(Number(v)).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                 formatter={(v) => [formatCurrency(Number(v)), 'TVL']}
               />
-              <Area
-                type="monotone"
-                dataKey="tvl"
-                stroke="#EA580C"
-                strokeWidth={2}
-                fill="url(#tvlGrad)"
-              />
+              <Area type="monotone" dataKey="tvl" stroke="#EA580C" strokeWidth={2} fill="url(#tvlGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </ChartPanel>
       )}
 
-      {/* ─── Per-chain holder + supply table ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <div className="flex">
-          {!data ? (
-            <PanelSkeleton height="h-72" label="Per-Chain Distribution" />
-          ) : (
-            <TuiPanel
-              title="PER-CHAIN DISTRIBUTION"
-              badge={`${data.chainHolders.length} chains`}
-              noPadding
-              className="w-full flex flex-col"
-            >
-              <div className="overflow-x-auto flex-1">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Chain</th>
-                      <th className="text-right">Holders</th>
-                      <th className="text-right">Supply</th>
-                      <th className="text-right">TVL</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.chainHolders.map((c) => (
-                      <tr key={c.chain}>
-                        <td>
-                          <span className={`chain-badge ${c.chain}`}>{c.chain}</span>
-                        </td>
-                        <td className="text-right">{c.holderCount}</td>
-                        <td className="text-right">
-                          {c.supply.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                        </td>
-                        <td className="text-right" style={{ fontWeight: 700 }}>
-                          {formatCurrency(c.tvlUsd)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </TuiPanel>
-          )}
+      {/* ─── Section 3: DeFi Activity Card ─── */}
+      <div
+        className="rounded-lg overflow-hidden"
+        style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
+      >
+        <div className="px-4 py-3 flex items-center justify-between" style={{ background: 'var(--panel-header)', borderBottom: '1px solid var(--border)' }}>
+          <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--accent-orange)' }}>
+            DeFi Activity
+          </span>
+          <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+            {data?.integrations.filter(i => i.status === 'live').length ?? 0} live integrations
+          </span>
         </div>
 
-        <div className="flex">
-          {!data ? (
-            <PanelSkeleton height="h-72" label="Wrap Ratio" />
-          ) : (
-            <TuiPanel
-              title="WRAP RATIO"
-              badge={w?.instSymbol ?? ''}
-              className="w-full flex flex-col"
-            >
-              <div className="px-4 pb-4 pt-2 space-y-3 flex-1 flex flex-col justify-center">
-                <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                  Of every dollar in {w?.instSymbol}, this fraction has been wrapped into the
-                  freely-transferable {w?.symbol} version usable in DeFi.
-                </div>
-                <div
-                  style={{
-                    height: 16,
-                    background: 'var(--border)',
-                    borderRadius: 4,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${Math.min(100, ((w?.wrapRatio ?? 0) * 100))}%`,
-                      height: '100%',
-                      background: 'var(--accent-orange)',
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <div>
-                    <div className="counter-label">Wrapped</div>
-                    <div style={{ fontWeight: 700, color: 'var(--accent-orange)' }}>
-                      {w ? formatCurrency(w.tvlUsd) : '—'}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="counter-label">Institutional</div>
-                    <div style={{ fontWeight: 700 }}>
-                      {w?.instTvlUsd != null ? formatCurrency(w.instTvlUsd) : '—'}
-                    </div>
-                  </div>
-                </div>
-                <div
-                  className="text-[11px] text-center pt-2"
-                  style={{
-                    color: 'var(--accent-orange)',
-                    fontWeight: 700,
-                    fontSize: 14,
-                  }}
-                >
-                  {w?.wrapRatio != null ? `${(w.wrapRatio * 100).toFixed(2)}%` : '—'} wrapped
-                </div>
-              </div>
-            </TuiPanel>
-          )}
-        </div>
-      </div>
-
-      {/* ─── Top Holders (paginated) ─── */}
-      {!data ? (
-        <PanelSkeleton height="h-96" label="Top Holders" />
-      ) : (
-        (() => {
-          const totalHolderPages = Math.max(1, Math.ceil(data.topHolders.length / ROWS_PER_PAGE));
-          const safeHolderPage = Math.min(holderPage, totalHolderPages - 1);
-          const holderRows = data.topHolders.slice(
-            safeHolderPage * ROWS_PER_PAGE,
-            safeHolderPage * ROWS_PER_PAGE + ROWS_PER_PAGE,
-          );
-          return (
-            <TuiPanel
-              title="TOP HOLDERS"
-              badge={`${data.topHolders.length} indexed of ${w?.holderCount} total`}
-              noPadding
-            >
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Account</th>
-                      <th>Chain</th>
-                      <th className="text-right">Shares</th>
-                      <th className="text-right">Value</th>
-                      <th className="text-right">% of TVL</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {holderRows.map((h, i) => {
-                      const explorer = EXPLORERS[h.chain.toLowerCase()];
-                      const pct = w && w.tvlUsd > 0 ? (h.valueUsd / w.tvlUsd) * 100 : 0;
-                      const globalIdx = safeHolderPage * ROWS_PER_PAGE + i + 1;
-                      return (
-                        <tr key={`${h.account}-${i}`}>
-                          <td style={{ color: 'var(--text-muted)' }}>{globalIdx}</td>
-                          <td className="font-mono">
-                            {explorer ? (
-                              <a
-                                href={`${explorer}${h.account}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ color: 'var(--accent-blue)' }}
-                                className="hover:underline"
-                              >
-                                {formatAddress(h.account)}
-                              </a>
-                            ) : (
-                              formatAddress(h.account)
-                            )}
-                          </td>
-                          <td>
-                            <span className={`chain-badge ${h.chain}`}>{h.chain}</span>
-                          </td>
-                          <td className="text-right">
-                            {h.shares.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                          </td>
-                          <td className="text-right" style={{ fontWeight: 700 }}>
-                            {formatCurrency(h.valueUsd)}
-                          </td>
-                          <td
-                            className="text-right"
-                            style={{ color: 'var(--accent-orange)', fontWeight: 600 }}
-                          >
-                            {pct.toFixed(2)}%
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {data.topHolders.length === 0 && (
-                      <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>
-                          No indexed holder positions for this wrapper yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              {data.topHolders.length > ROWS_PER_PAGE && (
-                <PaginationFooter
-                  page={safeHolderPage}
-                  totalPages={totalHolderPages}
-                  onPrev={() => setHolderPage((p) => Math.max(0, p - 1))}
-                  onNext={() => setHolderPage((p) => Math.min(totalHolderPages - 1, p + 1))}
-                />
-              )}
-            </TuiPanel>
-          );
-        })()
-      )}
-
-      {/* ─── Recent Transactions (paginated) ─── */}
-      {!data ? (
-        <PanelSkeleton height="h-72" label="Recent Activity" />
-      ) : (
-        (() => {
-          const totalActivityPages = Math.max(
-            1,
-            Math.ceil(data.recentTransactions.length / ROWS_PER_PAGE),
-          );
-          const safeActivityPage = Math.min(activityPage, totalActivityPages - 1);
-          const activityRows = data.recentTransactions.slice(
-            safeActivityPage * ROWS_PER_PAGE,
-            safeActivityPage * ROWS_PER_PAGE + ROWS_PER_PAGE,
-          );
-          return (
-            <TuiPanel
-              title="RECENT ACTIVITY"
-              badge={`${data.recentTransactions.length} txs in window`}
-              noPadding
-            >
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>When</th>
-                      <th>Type</th>
-                      <th>Account</th>
-                      <th>Chain</th>
-                      <th className="text-right">Token Amount</th>
-                      <th className="text-right">USD Value</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activityRows.map((tx) => {
-                      const meta =
-                        TX_TYPE_LABEL[tx.type] ?? { label: tx.type, color: 'var(--text-muted)' };
-                      const explorer = EXPLORERS[tx.chain.toLowerCase()];
-                      return (
-                        <tr key={tx.txHash + tx.type + tx.account}>
-                          <td style={{ color: 'var(--text-muted)' }}>{formatRelative(tx.createdAt)}</td>
-                          <td style={{ color: meta.color, fontWeight: 700 }}>{meta.label}</td>
-                          <td className="font-mono">
-                            {explorer ? (
-                              <a
-                                href={`${explorer}${tx.account}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ color: 'var(--accent-blue)' }}
-                                className="hover:underline"
-                              >
-                                {formatAddress(tx.account)}
-                              </a>
-                            ) : (
-                              formatAddress(tx.account)
-                            )}
-                          </td>
-                          <td>
-                            <span className={`chain-badge ${tx.chain}`}>{tx.chain}</span>
-                          </td>
-                          <td className="text-right">
-                            {tx.tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                          </td>
-                          <td className="text-right" style={{ fontWeight: 700 }}>
-                            {formatCurrency(tx.valueUsd)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {data.recentTransactions.length === 0 && (
-                      <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>
-                          No deposits or redemptions in this window.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              {data.recentTransactions.length > ROWS_PER_PAGE && (
-                <PaginationFooter
-                  page={safeActivityPage}
-                  totalPages={totalActivityPages}
-                  onPrev={() => setActivityPage((p) => Math.max(0, p - 1))}
-                  onNext={() =>
-                    setActivityPage((p) => Math.min(totalActivityPages - 1, p + 1))
-                  }
-                />
-              )}
-            </TuiPanel>
-          );
-        })()
-      )}
-
-      {/* ─── Morpho lending market ─── */}
-      {data?.morpho && (
-        <TuiPanel
-          title="MORPHO LENDING MARKET"
-          badge={`${data.morpho.collateralSymbol} / ${data.morpho.loanSymbol} · Base · live`}
-        >
-          <div className="px-4 pb-4 pt-2 space-y-4">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Morpho row */}
+        {morpho ? (
+          <Link
+            href={`/dashboard/derwa/${symbol}/morpho`}
+            className="flex items-center justify-between px-4 py-3 hover:bg-[var(--card-hover)] transition-colors"
+            style={{ borderBottom: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center gap-3">
+              <IntegrationBadge kind="lending" />
               <div>
-                <div className="counter-label">Supply</div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>
-                  {formatCurrency(data.morpho.supplyUsd)}
-                </div>
+                <div className="text-[12px] font-bold">Morpho</div>
                 <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  {data.morpho.loanSymbol} deposited
-                </div>
-              </div>
-              <div>
-                <div className="counter-label">Borrow</div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>
-                  {formatCurrency(data.morpho.borrowUsd)}
-                </div>
-                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  Against {data.morpho.collateralSymbol}
-                </div>
-              </div>
-              <div>
-                <div className="counter-label">Utilization</div>
-                <div style={{ fontWeight: 700, fontSize: 18, color: data.morpho.utilization > 0.9 ? 'var(--accent-red)' : data.morpho.utilization > 0.7 ? 'var(--accent-yellow)' : 'var(--foreground)' }}>
-                  {(data.morpho.utilization * 100).toFixed(1)}%
-                </div>
-                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  {data.morpho.utilization > 0.9 ? 'Very high' : data.morpho.utilization > 0.7 ? 'Moderate' : 'Healthy'}
-                </div>
-              </div>
-              <div>
-                <div className="counter-label">LLTV</div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>
-                  {(data.morpho.lltv * 100).toFixed(0)}%
-                </div>
-                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  Liquidation threshold
+                  deSPXA collateral · USDC lending
                 </div>
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div
-                className="rounded p-4"
-                style={{
-                  background: 'var(--accent-green-soft)',
-                  border: '1px solid var(--accent-green)',
-                }}
-              >
-                <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--accent-green)' }}>
-                  Supply APY
-                </div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-green)' }}>
-                  {(data.morpho.supplyApy * 100).toFixed(2)}%
-                </div>
-                <div className="text-[10px]" style={{ color: 'var(--accent-green)' }}>
-                  Earn by depositing {data.morpho.loanSymbol}
-                </div>
+            <div className="flex items-center gap-6 text-[11px]">
+              <div className="text-right">
+                <div className="font-bold">{formatCurrency(morpho.supplyUsd)}</div>
+                <div style={{ color: 'var(--text-muted)' }}>supply</div>
               </div>
-              <div
-                className="rounded p-4"
-                style={{
-                  background: 'var(--accent-red-soft)',
-                  border: '1px solid var(--accent-red)',
-                }}
-              >
-                <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--accent-red)' }}>
-                  Borrow APY
+              <div className="text-right">
+                <div className="font-bold" style={{ color: morpho.utilization > 0.9 ? 'var(--accent-red)' : 'var(--foreground)' }}>
+                  {(morpho.utilization * 100).toFixed(1)}%
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-red)' }}>
-                  {(data.morpho.borrowApy * 100).toFixed(2)}%
-                </div>
-                <div className="text-[10px]" style={{ color: 'var(--accent-red)' }}>
-                  Cost to borrow against {data.morpho.collateralSymbol}
-                </div>
+                <div style={{ color: 'var(--text-muted)' }}>util</div>
+              </div>
+              <div className="text-right">
+                <div className="font-bold num-positive">{(morpho.supplyApy * 100).toFixed(2)}%</div>
+                <div style={{ color: 'var(--text-muted)' }}>supply APY</div>
+              </div>
+              <StatusPill status="live" />
+              <span style={{ color: 'var(--text-muted)' }}>›</span>
+            </div>
+          </Link>
+        ) : data && (
+          <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+            <div className="flex items-center gap-3">
+              <IntegrationBadge kind="lending" />
+              <div>
+                <div className="text-[12px] font-bold">Morpho</div>
+                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>No live market data</div>
               </div>
             </div>
-
-            {data.morpho.marketUrl && (
-              <a
-                href={data.morpho.marketUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-[11px] font-semibold hover:underline"
-                style={{ color: 'var(--accent-blue)' }}
-              >
-                Open market on Morpho →
-              </a>
-            )}
+            <StatusPill status={data.integrations.find(i => i.protocol === 'Morpho')?.status ?? 'planned'} />
           </div>
-        </TuiPanel>
-      )}
+        )}
 
-      {/* ─── DEX panel + Integrations ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          {!data ? (
-            <PanelSkeleton height="h-56" label="DEX Liquidity" />
-          ) : w?.dex ? (
-            <TuiPanel title="DEX LIQUIDITY" badge={`${w.dex.network} · live`}>
-              <div className="px-4 py-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="counter-label">DEX Price</div>
-                    <div style={{ fontWeight: 700, fontSize: 18 }}>
-                      {w.dex.priceUsd != null ? `$${w.dex.priceUsd.toFixed(4)}` : '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="counter-label">NAV</div>
-                    <div style={{ fontWeight: 700, fontSize: 18 }}>${w.navUsd.toFixed(4)}</div>
-                  </div>
-                  <div>
-                    <div className="counter-label">Liquidity</div>
-                    <div style={{ fontWeight: 700 }}>{formatCurrency(w.dex.liquidityUsd)}</div>
-                  </div>
-                  <div>
-                    <div className="counter-label">24h Volume</div>
-                    <div style={{ fontWeight: 700 }}>{formatCurrency(w.dex.volume24hUsd)}</div>
-                  </div>
+        {/* DEX row */}
+        {w?.dex ? (
+          <Link
+            href={`/dashboard/derwa/${symbol}/dex`}
+            className="flex items-center justify-between px-4 py-3 hover:bg-[var(--card-hover)] transition-colors"
+            style={{ borderBottom: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center gap-3">
+              <IntegrationBadge kind="dex" />
+              <div>
+                <div className="text-[12px] font-bold">Aerodrome</div>
+                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  deSPXA / USDC · {w.dex.network}
                 </div>
-                <div>
-                  <div className="counter-label">Pool Address</div>
-                  <div className="font-mono text-[11px]" style={{ color: 'var(--accent-blue)' }}>
-                    {formatAddress(w.dex.address)}
-                  </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-6 text-[11px]">
+              <div className="text-right">
+                <div className="font-bold">{formatCurrency(w.dex.liquidityUsd)}</div>
+                <div style={{ color: 'var(--text-muted)' }}>liquidity</div>
+              </div>
+              <div className="text-right">
+                <div className={`font-bold ${w.dex.premiumPct != null ? (w.dex.premiumPct > 0 ? 'num-positive' : 'num-negative') : 'num-neutral'}`}>
+                  {w.dex.premiumPct != null ? `${w.dex.premiumPct >= 0 ? '+' : ''}${w.dex.premiumPct.toFixed(2)}%` : '—'}
                 </div>
-                {w.dex.priceUsd != null && (
-                  <div
-                    className="text-[11px] p-2 rounded"
-                    style={{
-                      background:
-                        w.dex.premiumPct == null || Math.abs(w.dex.premiumPct) < 0.5
-                          ? 'rgba(100,116,139,0.08)'
-                          : w.dex.premiumPct > 0
-                            ? 'var(--accent-green-soft)'
-                            : 'var(--accent-red-soft)',
-                      color:
-                        w.dex.premiumPct == null
-                          ? 'var(--text-muted)'
-                          : Math.abs(w.dex.premiumPct) < 0.5
-                            ? 'var(--text-muted)'
-                            : w.dex.premiumPct > 0
-                              ? 'var(--accent-green)'
-                              : 'var(--accent-red)',
-                    }}
-                  >
-                    DEX trades at <strong>{w.dex.premiumPct?.toFixed(2)}%</strong>{' '}
-                    {w.dex.premiumPct && w.dex.premiumPct >= 0 ? 'above' : 'below'} NAV.
-                    {w.dex.liquidityUsd < 1000 && (
-                      <span> Note: liquidity is too thin for the spread to be actionable.</span>
-                    )}
-                  </div>
-                )}
+                <div style={{ color: 'var(--text-muted)' }}>vs NAV</div>
               </div>
-            </TuiPanel>
-          ) : (
-            <TuiPanel title="DEX LIQUIDITY" badge="not available">
-              <div className="px-4 py-6 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                No live DEX integration with a known pool address for this wrapper yet.
-              </div>
-            </TuiPanel>
-          )}
-        </div>
+              <StatusPill status="live" />
+              <span style={{ color: 'var(--text-muted)' }}>›</span>
+            </div>
+          </Link>
+        ) : null}
 
-        <div>
-          {!data ? (
-            <PanelSkeleton height="h-56" label="DeFi Integrations" />
-          ) : (
-            <TuiPanel title="DEFI INTEGRATIONS" badge={`${data.integrations.length} listed`} noPadding>
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Protocol</th>
-                      <th>Chain</th>
-                      <th className="text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.integrations.map((i, idx) => (
-                      <tr key={idx}>
-                        <td>
-                          <span
-                            className="px-1.5 py-0.5 rounded font-bold"
-                            style={{
-                              fontSize: 9,
-                              background: 'var(--panel-header)',
-                              border: '1px solid var(--border)',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            {KIND_LABEL[i.kind] ?? i.kind.toUpperCase()}
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 600 }}>
-                          {i.url ? (
-                            <a
-                              href={i.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="hover:underline"
-                              style={{ color: 'var(--foreground)' }}
-                            >
-                              {i.protocol}
-                            </a>
-                          ) : (
-                            i.protocol
-                          )}
-                          {i.address && (
-                            <span
-                              className="ml-2 font-mono text-[9px]"
-                              style={{ color: 'var(--text-muted)' }}
-                            >
-                              {formatAddress(i.address)}
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          {i.chain ? (
-                            <span className={`chain-badge ${i.chain.toLowerCase()}`}>
-                              {i.chain}
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>—</span>
-                          )}
-                        </td>
-                        <td
-                          className="text-right"
-                          style={{
-                            color: STATUS_COLOR[i.status],
-                            fontWeight: 700,
-                            fontSize: 10,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                          }}
-                        >
-                          {i.status}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        {/* Oracle rows */}
+        {data?.integrations.filter(i => i.kind === 'oracle').map((i, idx) => (
+          <div
+            key={idx}
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderBottom: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center gap-3">
+              <IntegrationBadge kind="oracle" />
+              <div>
+                <div className="text-[12px] font-bold">{i.protocol}</div>
+                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{i.chain}</div>
               </div>
-            </TuiPanel>
-          )}
-        </div>
+            </div>
+            <StatusPill status={i.status} />
+          </div>
+        ))}
+
+        {/* Euler row */}
+        {data?.integrations.filter(i => i.protocol === 'Euler').map((i, idx) => (
+          <div
+            key={idx}
+            className="flex items-center justify-between px-4 py-3"
+          >
+            <div className="flex items-center gap-3">
+              <IntegrationBadge kind="lending" />
+              <div>
+                <div className="text-[12px] font-bold">{i.protocol}</div>
+                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{i.chain}</div>
+              </div>
+            </div>
+            <StatusPill status={i.status} />
+          </div>
+        ))}
+      </div>
+
+      {/* ─── Quick links to sub-pages ─── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <SubPageLink
+          href={`/dashboard/derwa/${symbol}/holders`}
+          title="Top Holders"
+          sub={w ? `${w.holderCount} wallets · per-chain breakdown` : 'Loading…'}
+        />
+        <SubPageLink
+          href={`/dashboard/derwa/${symbol}/morpho`}
+          title="Morpho Market"
+          sub={morpho ? `${(morpho.utilization * 100).toFixed(0)}% util · ${(morpho.supplyApy * 100).toFixed(2)}% APY` : 'View lending data'}
+        />
+        <SubPageLink
+          href={`/dashboard/derwa/${symbol}/dex`}
+          title="DEX & Pricing"
+          sub={w?.dex ? `${w.dex.premiumPct != null ? `${w.dex.premiumPct.toFixed(2)}% premium` : 'No trades'} · Aerodrome` : 'View market data'}
+        />
       </div>
     </div>
   );
 }
 
-/**
- * Reusable footer-style pagination control. Renders inside a TuiPanel that
- * uses `noPadding`, sitting flush with the bottom of the table.
- */
-function PaginationFooter({
-  page,
-  totalPages,
-  onPrev,
-  onNext,
-}: {
-  page: number;
-  totalPages: number;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div
-      className="flex items-center justify-end gap-2 px-4 py-2"
-      style={{ borderTop: '1px solid var(--border)' }}
-    >
-      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-        Page {page + 1} of {totalPages}
-      </span>
-      <button
-        type="button"
-        className="time-btn"
-        onClick={onPrev}
-        disabled={page === 0}
-        style={{ opacity: page === 0 ? 0.4 : 1 }}
-        aria-label="Previous page"
-      >
-        ‹
-      </button>
-      <button
-        type="button"
-        className="time-btn"
-        onClick={onNext}
-        disabled={page === totalPages - 1}
-        style={{ opacity: page === totalPages - 1 ? 0.4 : 1 }}
-        aria-label="Next page"
-      >
-        ›
-      </button>
-    </div>
-  );
-}
+/* ─── Compact helper components ─── */
 
-function SummaryTile({
-  label,
-  value,
-  subtitle,
-  colorClass,
+function HeroTile({
+  label, value, sub, color, href,
 }: {
-  label: string;
-  value: string;
-  subtitle: string;
-  colorClass?: 'text-orange' | 'text-green' | 'text-red';
+  label: string; value: string; sub: string;
+  color?: 'orange' | 'green' | 'red';
+  href?: string;
 }) {
-  const color =
-    colorClass === 'text-orange'
-      ? 'var(--accent-orange)'
-      : colorClass === 'text-green'
-        ? 'var(--accent-green)'
-        : colorClass === 'text-red'
-          ? 'var(--accent-red)'
-          : undefined;
-  return (
-    <div
-      className="rounded p-5"
-      style={{
-        background: 'var(--card)',
-        border: '1px solid var(--border)',
-        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-      }}
-    >
+  const clr = color === 'orange' ? 'var(--accent-orange)' : color === 'green' ? 'var(--accent-green)' : color === 'red' ? 'var(--accent-red)' : undefined;
+  const inner = (
+    <div className="rounded p-4" style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
       <div className="counter-label">{label}</div>
-      <div className="counter-value" style={{ color }}>
-        {value}
-      </div>
-      <div className="text-[11px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
-        {subtitle}
-      </div>
+      <div className="text-[22px] font-bold" style={{ color: clr, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{sub}</div>
     </div>
+  );
+  if (href) return <Link href={href} className="hover:opacity-80 transition-opacity">{inner}</Link>;
+  return inner;
+}
+
+function IntegrationBadge({ kind }: { kind: string }) {
+  const colors: Record<string, string> = {
+    lending: '#9333EA',
+    dex: '#2563EB',
+    oracle: '#CA8A04',
+    wallet: '#64748B',
+  };
+  return (
+    <span
+      className="inline-flex items-center justify-center w-8 h-8 rounded text-[9px] font-bold text-white uppercase"
+      style={{ background: colors[kind] ?? '#64748B' }}
+    >
+      {kind.slice(0, 3)}
+    </span>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const styles: Record<string, { bg: string; color: string }> = {
+    live: { bg: 'var(--accent-green-soft)', color: 'var(--accent-green)' },
+    announced: { bg: 'rgba(202,138,4,0.1)', color: 'var(--accent-yellow)' },
+    planned: { bg: 'rgba(100,116,139,0.1)', color: 'var(--text-muted)' },
+  };
+  const s = styles[status] ?? styles.planned;
+  return (
+    <span
+      className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider"
+      style={{ background: s.bg, color: s.color }}
+    >
+      {status}
+    </span>
+  );
+}
+
+function SubPageLink({ href, title, sub }: { href: string; title: string; sub: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between p-4 rounded hover:bg-[var(--card-hover)] transition-colors"
+      style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+    >
+      <div>
+        <div className="text-[12px] font-bold">{title}</div>
+        <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{sub}</div>
+      </div>
+      <span className="text-[14px] font-bold" style={{ color: 'var(--accent-orange)' }}>›</span>
+    </Link>
   );
 }
