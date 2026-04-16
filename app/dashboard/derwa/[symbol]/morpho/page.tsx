@@ -111,58 +111,16 @@ export default function MorphoSubPage() {
             <Stat label="Bad Debt" value={m.badDebtUsd > 0 ? formatCurrency(m.badDebtUsd) : '$0'} color={m.badDebtUsd > 0 ? 'red' : 'green'} />
           </div>
 
-          {/* ─── Section 2: Three columns ─── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <ApyCard
-              title="For Lenders"
-              apy={m.supplyApy}
-              color="green"
-              lines={[
-                `Deposit ${m.loanSymbol}, earn ${(m.supplyApy * 100).toFixed(2)}% APY`,
-                `${formatCurrency(m.supplyUsd)} already supplied`,
-                `Only ${formatCurrency(m.liquidityUsd)} capacity left`,
-              ]}
-            />
-            <ApyCard
-              title="For Borrowers"
-              apy={m.borrowApy}
-              color="red"
-              lines={[
-                `Lock ${m.collateralSymbol}, borrow ${m.loanSymbol} at ${(m.borrowApy * 100).toFixed(2)}%`,
-                `Max ${(m.lltv * 100).toFixed(0)}% LTV before liquidation`,
-                `${formatCurrency(m.collateralUsd)} collateral locked`,
-              ]}
-            />
-            <div className="rounded-lg p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-              <div className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
-                Market Health
-              </div>
-              <div className="space-y-3">
-                <HealthRow
-                  label="Collateral Ratio"
-                  value={`${(m.collateralRatio * 100).toFixed(0)}%`}
-                  sub={`${formatCurrency(m.collateralUsd)} backing ${formatCurrency(m.borrowUsd)}`}
-                  color={m.collateralRatio > 1.5 ? 'green' : m.collateralRatio > 1.2 ? 'yellow' : 'red'}
-                />
-                <HealthRow
-                  label="Distance to Liquidation"
-                  value={`${(m.distanceToLiquidation * 100).toFixed(0)}%`}
-                  sub={`S&P 500 must drop ~${(m.distanceToLiquidation * 100).toFixed(0)}%`}
-                  color={m.distanceToLiquidation > 0.3 ? 'green' : m.distanceToLiquidation > 0.15 ? 'yellow' : 'red'}
-                />
-                <HealthRow
-                  label="Bad Debt"
-                  value={m.badDebtUsd > 0 ? formatCurrency(m.badDebtUsd) : 'None'}
-                  sub="Lifetime bad debt accrued"
-                  color={m.badDebtUsd === 0 ? 'green' : 'red'}
-                />
-                <HealthRow
-                  label="Oracle"
-                  value={m.oracleType}
-                  sub={`±${(m.dailyPriceVariation * 100).toFixed(2)}% daily`}
-                />
-              </div>
-            </div>
+          {/* ─── Section 2: Compact metrics grid ─── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <CompactMetric label="Supply APY" value={`${(m.supplyApy * 100).toFixed(2)}%`} color="green" sub={`Earn on ${m.loanSymbol}`} />
+            <CompactMetric label="Borrow APY" value={`${(m.borrowApy * 100).toFixed(2)}%`} color="red" sub={`Cost against ${m.collateralSymbol}`} />
+            <CompactMetric label="Collateral Ratio" value={`${(m.collateralRatio * 100).toFixed(0)}%`} color={m.collateralRatio > 1.5 ? 'green' : 'yellow'} sub={`${formatCurrency(m.collateralUsd)} locked`} />
+            <CompactMetric label="Liquidation Buffer" value={`${(m.distanceToLiquidation * 100).toFixed(0)}%`} color={m.distanceToLiquidation > 0.3 ? 'green' : 'yellow'} sub={`S&P must drop ~${(m.distanceToLiquidation * 100).toFixed(0)}%`} />
+            <CompactMetric label="LLTV" value={`${(m.lltv * 100).toFixed(0)}%`} sub="Max borrow ratio" />
+            <CompactMetric label="Bad Debt" value={m.badDebtUsd > 0 ? formatCurrency(m.badDebtUsd) : '$0'} color={m.badDebtUsd === 0 ? 'green' : 'red'} sub="Lifetime" />
+            <CompactMetric label="Oracle" value={m.oracleType.replace('OracleV2', ' V2')} sub={`±${(m.dailyPriceVariation * 100).toFixed(2)}%/day`} />
+            <CompactMetric label="Protocol Fee" value={m.fee > 0 ? `${(m.fee * 100).toFixed(2)}%` : 'None'} sub="Morpho take rate" />
           </div>
 
           {/* ─── Section 3: IRM Curve + APY History (side by side) ─── */}
@@ -317,34 +275,13 @@ function Stat({ label, value, color }: { label: string; value: string; color?: '
   );
 }
 
-function ApyCard({ title, apy, color, lines }: { title: string; apy: number; color: 'green' | 'red'; lines: string[] }) {
-  const bg = color === 'green' ? 'var(--accent-green-soft)' : 'var(--accent-red-soft)';
-  const fg = color === 'green' ? 'var(--accent-green)' : 'var(--accent-red)';
-  const border = fg;
+function CompactMetric({ label, value, sub, color }: { label: string; value: string; sub: string; color?: 'green' | 'red' | 'yellow' }) {
+  const clr = color === 'green' ? 'var(--accent-green)' : color === 'red' ? 'var(--accent-red)' : color === 'yellow' ? 'var(--accent-yellow)' : undefined;
   return (
-    <div className="rounded-lg p-5" style={{ background: bg, border: `1px solid ${border}` }}>
-      <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: fg }}>{title}</div>
-      <div style={{ fontSize: 32, fontWeight: 700, color: fg, lineHeight: 1.1, letterSpacing: '-0.01em' }}>
-        {(apy * 100).toFixed(2)}%
-      </div>
-      <div className="mt-3 space-y-1">
-        {lines.map((line, i) => (
-          <div key={i} className="text-[10px]" style={{ color: fg, opacity: 0.85 }}>{line}</div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function HealthRow({ label, value, sub, color }: { label: string; value: string; sub: string; color?: 'green' | 'red' | 'yellow' }) {
-  const clr = color === 'green' ? 'var(--accent-green)' : color === 'red' ? 'var(--accent-red)' : color === 'yellow' ? 'var(--accent-yellow)' : 'var(--foreground)';
-  return (
-    <div>
-      <div className="flex items-baseline justify-between">
-        <span className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>{label}</span>
-        <span className="text-[13px] font-bold" style={{ color: clr }}>{value}</span>
-      </div>
-      <div className="text-[9px]" style={{ color: 'var(--text-muted)' }}>{sub}</div>
+    <div className="rounded px-3 py-2.5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+      <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}</div>
+      <div className="text-[16px] font-bold mt-0.5" style={{ color: clr, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div className="text-[9px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{sub}</div>
     </div>
   );
 }
