@@ -165,48 +165,64 @@ export default function MorphoSubPage() {
             </div>
           </div>
 
-          {/* ─── Section 3: IRM Curve ─── */}
-          {m.irmCurve.length > 0 && (
-            <ChartPanel title="INTEREST RATE MODEL" badge="How rates change with utilization" height="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={m.irmCurve} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis
-                    dataKey="utilization"
-                    tick={{ fontSize: 10, fill: '#64748B' }}
-                    tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-                    stroke="#CBD5E1"
-                    tickMargin={8}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: '#64748B' }}
-                    tickFormatter={(v) => `${(v * 100).toFixed(1)}%`}
-                    stroke="#CBD5E1"
-                    width={55}
-                  />
-                  <Tooltip
-                    contentStyle={TOOLTIP_STYLE}
-                    formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`}
-                    labelFormatter={(v) => `Utilization: ${(Number(v) * 100).toFixed(0)}%`}
-                    labelStyle={{ fontWeight: 700 }}
-                  />
-                  <ReferenceLine
-                    x={m.utilization}
-                    stroke="var(--accent-orange)"
-                    strokeDasharray="4 4"
-                    strokeWidth={2}
-                    label={{ value: 'NOW', position: 'top', fontSize: 10, fill: '#EA580C', fontWeight: 700 }}
-                  />
-                  <Line type="monotone" dataKey="supplyApy" name="Supply APY" stroke="#16A34A" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="borrowApy" name="Borrow APY" stroke="#DC2626" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartPanel>
-          )}
-
-          {/* ─── Section 4: Historical charts ─── */}
+          {/* ─── Section 3: IRM Curve + APY History (side by side) ─── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Supply + Borrow over time */}
+            {m.irmCurve.length > 0 && (
+              <ChartPanel title="INTEREST RATE MODEL" badge="Rates vs utilization" height="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={m.irmCurve} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis
+                      dataKey="utilization"
+                      tick={{ fontSize: 9, fill: '#64748B' }}
+                      tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
+                      stroke="#CBD5E1"
+                      tickMargin={6}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 9, fill: '#64748B' }}
+                      tickFormatter={(v) => `${(v * 100).toFixed(1)}%`}
+                      stroke="#CBD5E1"
+                      width={48}
+                    />
+                    <Tooltip
+                      contentStyle={TOOLTIP_STYLE}
+                      formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`}
+                      labelFormatter={(v) => `Utilization: ${(Number(v) * 100).toFixed(0)}%`}
+                      labelStyle={{ fontWeight: 700 }}
+                    />
+                    <ReferenceLine
+                      x={m.utilization}
+                      stroke="var(--accent-orange)"
+                      strokeDasharray="4 4"
+                      strokeWidth={2}
+                      label={{ value: 'NOW', position: 'top', fontSize: 10, fill: '#EA580C', fontWeight: 700 }}
+                    />
+                    <Line type="monotone" dataKey="supplyApy" name="Supply APY" stroke="#16A34A" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="borrowApy" name="Borrow APY" stroke="#DC2626" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartPanel>
+            )}
+
+            {m.historicalSupplyApy.length > 2 && (
+              <ChartPanel title="APY HISTORY" badge="Supply (green) vs Borrow (red)" height="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
+                    <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} stroke="#CBD5E1" width={48} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`} />
+                    <Line data={m.historicalSupplyApy} type="monotone" dataKey="y" name="Supply APY" stroke="#16A34A" strokeWidth={1.5} dot={false} />
+                    <Line data={m.historicalBorrowApy} type="monotone" dataKey="y" name="Borrow APY" stroke="#DC2626" strokeWidth={1.5} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartPanel>
+            )}
+          </div>
+
+          {/* ─── Section 4: Supply/Borrow + Utilization (side by side) ─── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {m.historicalSupplyUsd.length > 2 && (
               <ChartPanel title="SUPPLY & BORROW" badge={`${m.historicalSupplyUsd.length} data points`} height="h-56">
                 <ResponsiveContainer width="100%" height="100%">
@@ -232,7 +248,6 @@ export default function MorphoSubPage() {
               </ChartPanel>
             )}
 
-            {/* Utilization over time */}
             {m.historicalUtilization.length > 2 && (
               <ChartPanel title="UTILIZATION" badge="90% = danger zone" height="h-56">
                 <ResponsiveContainer width="100%" height="100%">
@@ -254,22 +269,6 @@ export default function MorphoSubPage() {
               </ChartPanel>
             )}
           </div>
-
-          {/* APY history */}
-          {m.historicalSupplyApy.length > 2 && (
-            <ChartPanel title="APY HISTORY" badge="Supply (green) vs Borrow (red)" height="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
-                  <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} stroke="#CBD5E1" width={50} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`} />
-                  <Line data={m.historicalSupplyApy} type="monotone" dataKey="y" name="Supply APY" stroke="#16A34A" strokeWidth={1.5} dot={false} />
-                  <Line data={m.historicalBorrowApy} type="monotone" dataKey="y" name="Borrow APY" stroke="#DC2626" strokeWidth={1.5} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartPanel>
-          )}
 
           {/* ─── Section 5: Market parameters ─── */}
           <TuiPanel title="MARKET PARAMETERS" noPadding>
