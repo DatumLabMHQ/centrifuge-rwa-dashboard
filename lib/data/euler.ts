@@ -49,8 +49,16 @@ interface EthCall {
   data: string;
 }
 
+/**
+ * Base RPC — `BASE_RPC_URL` env var lets deployments swap in Alchemy or
+ * another paid provider. Falls back to `base.drpc.org` which handles
+ * batched requests without rate-limiting (unlike `mainnet.base.org` or
+ * `base.llamarpc.com`).
+ */
+const BASE_RPC_URL = process.env.BASE_RPC_URL ?? 'https://base.drpc.org';
+
 async function rpcCall(method: string, params: unknown[]): Promise<string> {
-  const res = await fetch('https://mainnet.base.org', {
+  const res = await fetch(BASE_RPC_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 }),
@@ -63,6 +71,35 @@ async function rpcCall(method: string, params: unknown[]): Promise<string> {
 
 const eth_call = (call: EthCall) =>
   rpcCall('eth_call', [{ to: call.to, data: call.data }, 'latest']);
+
+/**
+ * Batched version of eth_call — sends multiple calls in one JSON-RPC batch
+ * request, which works around strict per-request rate limits on public RPCs.
+ */
+async function rpcBatch(calls: EthCall[]): Promise<string[]> {
+  const body = calls.map((c, i) => ({
+    jsonrpc: '2.0',
+    method: 'eth_call',
+    params: [{ to: c.to, data: c.data }, 'latest'],
+    id: i,
+  }));
+  const res = await fetch(BASE_RPC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Base RPC batch failed: ${res.status}`);
+  const json = await res.json();
+  if (!Array.isArray(json)) {
+    throw new Error(`Base RPC batch returned non-array: ${JSON.stringify(json).slice(0, 100)}`);
+  }
+  // Responses may come back out of order — sort by id.
+  json.sort((a: { id: number }, b: { id: number }) => a.id - b.id);
+  return json.map((r: { result?: string; error?: { message: string } }) => {
+    if (r.error) throw new Error(r.error.message);
+    return r.result ?? '0x';
+  });
+}
 
 // Function selectors (first 4 bytes of keccak256)
 const SEL = {
@@ -108,6 +145,8 @@ export async function getEulerMarketStats(
   loanDecimals = 6,
 ): Promise<EulerMarketStats | null> {
   try {
+    // One batched JSON-RPC request instead of seven — avoids public-RPC
+    // rate limits when this runs on Vercel.
     const [
       collSymbolHex,
       collDecHex,
@@ -116,15 +155,16 @@ export async function getEulerMarketStats(
       loanTotalAssetsHex,
       loanTotalBorrowsHex,
       loanIrHex,
-    ] = await Promise.all([
-      eth_call({ to: collateralVault, data: SEL.symbol }),
-      eth_call({ to: collateralVault, data: SEL.decimals }),
-      eth_call({ to: collateralVault, data: SEL.totalAssets }),
-      eth_call({ to: borrowVault, data: SEL.symbol }),
-      eth_call({ to: borrowVault, data: SEL.totalAssets }),
-      eth_call({ to: borrowVault, data: SEL.totalBorrows }),
-      eth_call({ to: borrowVault, data: SEL.interestRate }).catch(() => '0x'),
-    ]);
+    ] = await rpcBatch([
+      { to: collateralVault, data: SEL.symbol },
+      { to: collateralVault, data: SEL.decimals },
+      { to: collateralVault, data: SEL.totalAssets },
+      { to: borrowVault, data: SEL.symbol },
+      { to: borrowVault, data: SEL.totalAssets },
+      { to: borrowVault, data: SEL.totalBorrows },
+      { to: borrowVault, data: SEL.interestRate },
+    ]).catch(() => ['0x', '0x', '0x', '0x', '0x', '0x', '0x']);
+    void eth_call; // keep the single-call helper available for future use
 
     const collDecimals = Number(hexToNumber(collDecHex));
     const collRaw = hexToNumber(collTotalAssetsHex);
