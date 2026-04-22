@@ -8,6 +8,7 @@ import {
 } from '@/lib/data/centrifuge';
 import { getDefiLlamaPool } from '@/lib/data/defillama-yields';
 import { getDexPoolStats } from '@/lib/data/geckoterminal';
+import { getEulerMarketStats, type EulerMarketStats } from '@/lib/data/euler';
 import { aggregateDerwa } from '@/lib/data/derwa-aggregate';
 import { getDerwaContext } from '@/lib/data/derwa-context';
 import type { DerwaData } from '@/lib/data/types';
@@ -80,6 +81,32 @@ export async function GET(request: Request) {
       }
     }
 
+    // Euler on-chain reads — need NAV per wrapper for collateral valuation.
+    const navBySymbol = new Map<string, number>();
+    for (const p of pools) {
+      for (const t of p.tokens.items) {
+        if (WRAPPER_SYMBOLS.includes(t.symbol)) {
+          navBySymbol.set(t.symbol, Number(t.tokenPrice) / 1e18);
+        }
+      }
+    }
+    const eulerStats = new Map<string, EulerMarketStats | null>();
+    for (const sym of WRAPPER_SYMBOLS) {
+      const ctx = getDerwaContext(sym);
+      const euler = ctx?.integrations.find(
+        (i) => i.kind === 'lending' && i.protocol === 'Euler' && i.status === 'live',
+      );
+      if (!euler?.address || !euler.url) continue;
+      // Parse the second vault address from the Euler borrow URL:
+      //   /borrow/{collateralVault}/{borrowVault}?network=8453
+      const match = euler.url.match(/\/borrow\/(0x[a-fA-F0-9]+)\/(0x[a-fA-F0-9]+)/);
+      if (!match) continue;
+      const [, collateralVault, borrowVault] = match;
+      const nav = navBySymbol.get(sym) ?? 0;
+      const stats = await getEulerMarketStats(collateralVault, borrowVault, nav);
+      eulerStats.set(sym, stats);
+    }
+
     const data = aggregateDerwa({
       pools,
       transactions,
@@ -87,6 +114,7 @@ export async function GET(request: Request) {
       snapshotsBySymbol,
       dexPools,
       geckoStats,
+      eulerStats,
       windowDays: days,
     });
 

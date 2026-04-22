@@ -86,8 +86,19 @@ const DERWA_CONTEXT: DerwaContext[] = [
         protocol: 'Euler',
         kind: 'lending',
         chain: 'Base',
-        url: 'https://www.euler.finance',
-        status: 'announced',
+        /** Euler deSPXA market in the Clearstar-curated RWA vault. */
+        address: '0x0a6Af3A75BB350Fb1a402B70138B9820Cf0CA0Cb',
+        url: 'https://app.euler.finance/borrow/0x0a6Af3A75BB350Fb1a402B70138B9820Cf0CA0Cb/0xEaA709fDb7CCcfbBF5185feBf183F0138cDe5983?network=8453',
+        status: 'live',
+      },
+      {
+        protocol: 'Chronicle Price Proxy',
+        kind: 'oracle',
+        chain: 'Base',
+        /** 24/7 deSPXA/USD price feed used by Euler. */
+        address: '0x9Fb1db0252D9153F426FC585135B7696F8a37d96',
+        url: 'https://app.euler.finance/explore/clearstar-rwa',
+        status: 'live',
       },
     ],
   },

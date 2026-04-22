@@ -27,6 +27,7 @@ import { getDerwaContext } from '@/lib/data/derwa-context';
 import type { TokenSnapshot } from '@/lib/data/centrifuge';
 import type { DefiLlamaPool } from '@/lib/data/defillama-yields';
 import type { GeckoPoolStats } from '@/lib/data/geckoterminal';
+import type { EulerMarketStats } from '@/lib/data/euler';
 
 /* ─── BigInt helpers (copied from aggregate.ts so derwa is self-contained) ── */
 
@@ -67,6 +68,8 @@ export interface AggregateDerwaInput {
   dexPools: Map<string, DefiLlamaPool | null>;
   /** Map of `poolAddress (lowercase) → GeckoTerminal stats` for live price. */
   geckoStats: Map<string, GeckoPoolStats | null>;
+  /** Map of `wrapperSymbol → Euler market stats` (null when no market). */
+  eulerStats: Map<string, EulerMarketStats | null>;
   windowDays: number;
 }
 
@@ -176,6 +179,27 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
     const snapshots = snapshotsBySymbol.get(sym) ?? [];
     const sparkline = buildSparkline(snapshots, token.decimals, cutoff);
 
+    // Euler lending market stats — pulled on-chain by the API route.
+    const eulerIntegration = ctx.integrations.find(
+      (i) => i.kind === 'lending' && i.protocol === 'Euler' && i.status === 'live',
+    );
+    const eulerRaw = input.eulerStats.get(sym) ?? null;
+    const euler =
+      eulerIntegration && eulerRaw
+        ? {
+            collateralVault: eulerRaw.collateralVault,
+            borrowVault: eulerRaw.borrowVault,
+            collateralSymbol: eulerRaw.collateralSymbol,
+            loanSymbol: eulerRaw.loanSymbol,
+            collateralUsd: eulerRaw.collateralUsd,
+            supplyUsd: eulerRaw.supplyUsd,
+            borrowUsd: eulerRaw.borrowUsd,
+            utilization: eulerRaw.utilization,
+            borrowApr: eulerRaw.borrowApr,
+            url: eulerIntegration.url ?? 'https://app.euler.finance',
+          }
+        : null;
+
     // DEX stats — merge DefiLlama (TVL, APY) + GeckoTerminal (live price).
     const dexIntegration = ctx.integrations.find(
       (i) => i.kind === 'dex' && i.status === 'live' && i.defiLlamaPoolId,
@@ -227,6 +251,7 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
       holderCount: holderAccounts.size,
       topHolders,
       sparkline,
+      euler,
       dex,
     });
   }

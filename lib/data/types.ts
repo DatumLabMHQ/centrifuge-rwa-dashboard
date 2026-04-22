@@ -179,6 +179,21 @@ export interface DerwaWrapperRow {
   /** Historical TVL series (within the active window). */
   sparkline: Array<{ t: number; tvl: number }>;
 
+  /** Euler lending market stats — read on-chain from EVault contracts.
+   *  Null when the wrapper has no Euler market or the reads fail. */
+  euler: {
+    collateralVault: string;
+    borrowVault: string;
+    collateralSymbol: string;
+    loanSymbol: string;
+    collateralUsd: number;
+    supplyUsd: number;
+    borrowUsd: number;
+    utilization: number;
+    borrowApr: number | null;
+    url: string;
+  } | null;
+
   /** DEX pool stats — sourced from DefiLlama yields + GeckoTerminal. */
   dex: {
     network: string;

@@ -323,22 +323,63 @@ export default function DerwaDetailPage() {
           </div>
         ))}
 
-        {/* Euler row */}
-        {data?.integrations.filter(i => i.protocol === 'Euler').map((i, idx) => (
-          <div
-            key={idx}
-            className="flex items-center justify-between px-4 py-3"
+        {/* Euler row — clickable w/ live on-chain data when market has activity */}
+        {w?.euler ? (
+          <a
+            href={w.euler.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between px-4 py-3 hover:bg-[var(--card-hover)] transition-colors"
           >
             <div className="flex items-center gap-3">
               <IntegrationBadge kind="lending" />
               <div>
-                <div className="text-[12px] font-bold">{i.protocol}</div>
-                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{i.chain}</div>
+                <div className="text-[12px] font-bold">Euler</div>
+                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  Clearstar RWA · {w.euler.collateralSymbol} collateral · {w.euler.loanSymbol} borrow
+                </div>
               </div>
             </div>
-            <StatusPill status={i.status} />
-          </div>
-        ))}
+            <div className="flex items-center gap-6 text-[11px]">
+              <div className="text-right">
+                <div className="font-bold">{formatCurrency(w.euler.supplyUsd)}</div>
+                <div style={{ color: 'var(--text-muted)' }}>supply</div>
+              </div>
+              <div className="text-right">
+                <div className="font-bold" style={{ color: w.euler.utilization > 0.9 ? 'var(--accent-red)' : 'var(--foreground)' }}>
+                  {w.euler.supplyUsd > 0 ? `${(w.euler.utilization * 100).toFixed(1)}%` : '—'}
+                </div>
+                <div style={{ color: 'var(--text-muted)' }}>util</div>
+              </div>
+              <div className="text-right">
+                <div className="font-bold num-negative">
+                  {w.euler.borrowApr != null && w.euler.borrowApr > 0 ? `${(w.euler.borrowApr * 100).toFixed(2)}%` : '—'}
+                </div>
+                <div style={{ color: 'var(--text-muted)' }}>borrow APR</div>
+              </div>
+              <StatusPill status="live" />
+              <span style={{ color: 'var(--text-muted)' }}>↗</span>
+            </div>
+          </a>
+        ) : (
+          data?.integrations
+            .filter(i => i.protocol === 'Euler')
+            .map((i, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between px-4 py-3"
+              >
+                <div className="flex items-center gap-3">
+                  <IntegrationBadge kind="lending" />
+                  <div>
+                    <div className="text-[12px] font-bold">{i.protocol}</div>
+                    <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{i.chain}</div>
+                  </div>
+                </div>
+                <StatusPill status={i.status} />
+              </div>
+            ))
+        )}
       </div>
 
       {/* ─── Quick links to sub-pages ─── */}
