@@ -214,7 +214,7 @@ export default function DerwaDetailPage() {
         </ChartPanel>
       )}
 
-      {/* ─── Section 3: DeFi Activity Card ─── */}
+      {/* ─── Section 3: DeFi Activity Card — lending markets + DEX venues ─── */}
       <div
         className="rounded-lg overflow-hidden"
         style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
@@ -224,7 +224,7 @@ export default function DerwaDetailPage() {
             DeFi Activity
           </span>
           <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-            {data?.integrations.filter(i => i.status === 'live').length ?? 0} live integrations
+            {data?.integrations.filter(i => i.status === 'live' && (i.kind === 'lending' || i.kind === 'dex')).length ?? 0} live venues
           </span>
         </div>
 
@@ -311,24 +311,6 @@ export default function DerwaDetailPage() {
           </Link>
         ) : null}
 
-        {/* Oracle rows */}
-        {data?.integrations.filter(i => i.kind === 'oracle').map((i, idx) => (
-          <div
-            key={idx}
-            className="flex items-center justify-between px-4 py-3"
-            style={{ borderBottom: '1px solid var(--border)' }}
-          >
-            <div className="flex items-center gap-3">
-              <IntegrationBadge kind="oracle" />
-              <div>
-                <div className="text-[12px] font-bold">{i.protocol}</div>
-                <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{i.chain}</div>
-              </div>
-            </div>
-            <StatusPill status={i.status} />
-          </div>
-        ))}
-
         {/* Euler row — clickable w/ live on-chain data when market has activity */}
         {w?.euler ? (
           <a
@@ -387,6 +369,77 @@ export default function DerwaDetailPage() {
             ))
         )}
       </div>
+
+      {/* ─── Section 3b: Oracle Feeds ─── Pricing infrastructure, not
+           venues. Shown as a separate card so users understand these
+           are backend attestations rather than places to transact. */}
+      {data?.integrations.some((i) => i.kind === 'oracle') && (
+        <div
+          className="rounded-lg overflow-hidden"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
+        >
+          <div
+            className="px-4 py-3 flex items-center justify-between"
+            style={{ background: 'var(--panel-header)', borderBottom: '1px solid var(--border)' }}
+          >
+            <div className="flex items-baseline gap-3">
+              <span
+                className="text-[11px] font-bold uppercase tracking-wider"
+                style={{ color: 'var(--accent-orange)' }}
+              >
+                Oracle Feeds
+              </span>
+              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                pricing infrastructure · read-only
+              </span>
+            </div>
+            <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              {data.integrations.filter((i) => i.kind === 'oracle' && i.status === 'live').length} live feeds
+            </span>
+          </div>
+          {data.integrations
+            .filter((i) => i.kind === 'oracle')
+            .map((i, idx, arr) => {
+              const isPoA = i.protocol.toLowerCase().includes('proof of asset');
+              const sub = isPoA
+                ? `${i.chain} · attests off-chain backing, updates daily`
+                : `${i.chain} · 24/7 derived price feed for liquidation engines`;
+              const body = (
+                <div
+                  className="flex items-center justify-between px-4 py-3"
+                  style={idx < arr.length - 1 ? { borderBottom: '1px solid var(--border)' } : undefined}
+                >
+                  <div className="flex items-center gap-3">
+                    <IntegrationBadge kind="oracle" />
+                    <div>
+                      <div className="text-[12px] font-bold">{i.protocol}</div>
+                      <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                        {sub}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <StatusPill status={i.status} />
+                    {i.url && <span style={{ color: 'var(--text-muted)' }}>↗</span>}
+                  </div>
+                </div>
+              );
+              return i.url ? (
+                <a
+                  key={idx}
+                  href={i.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block hover:bg-[var(--card-hover)] transition-colors"
+                >
+                  {body}
+                </a>
+              ) : (
+                <div key={idx}>{body}</div>
+              );
+            })}
+        </div>
+      )}
 
       {/* ─── Quick links to sub-pages ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
