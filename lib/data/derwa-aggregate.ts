@@ -195,7 +195,9 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
             supplyUsd: eulerRaw.supplyUsd,
             borrowUsd: eulerRaw.borrowUsd,
             utilization: eulerRaw.utilization,
-            borrowApr: eulerRaw.borrowApr,
+            supplyApy: eulerRaw.supplyApy,
+            borrowApy: eulerRaw.borrowApy,
+            oracleAddress: eulerRaw.oracleAddress,
             url: eulerIntegration.url ?? 'https://app.euler.finance',
           }
         : null;

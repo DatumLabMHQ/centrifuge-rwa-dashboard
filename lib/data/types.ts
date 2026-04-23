@@ -179,8 +179,8 @@ export interface DerwaWrapperRow {
   /** Historical TVL series (within the active window). */
   sparkline: Array<{ t: number; tvl: number }>;
 
-  /** Euler lending market stats — read on-chain from EVault contracts.
-   *  Null when the wrapper has no Euler market or the reads fail. */
+  /** Euler lending market stats — sourced from the Goldsky subgraph.
+   *  Null when the wrapper has no Euler market or the query failed. */
   euler: {
     collateralVault: string;
     borrowVault: string;
@@ -190,7 +190,9 @@ export interface DerwaWrapperRow {
     supplyUsd: number;
     borrowUsd: number;
     utilization: number;
-    borrowApr: number | null;
+    supplyApy: number;
+    borrowApy: number;
+    oracleAddress: string;
     url: string;
   } | null;
 

@@ -1,206 +1,164 @@
 /**
- * Euler v2 EVault reader — reads lending market state directly from the
- * chain because:
- *   1. Euler doesn't expose a public GraphQL/subgraph API
- *   2. DefiLlama doesn't index the specific Clearstar-curated deSPXA market
- *   3. The market just launched — we need live on-chain numbers as it fills
+ * Euler v2 reader — uses the official Goldsky subgraph.
  *
- * An Euler market has two vaults:
- *   - Collateral vault: wraps the collateral token (deSPXA in our case).
- *     Users deposit deSPXA here and it becomes eDeSPXA-1 shares.
- *   - Borrow vault: wraps the borrowable asset (USDC). Users borrow from here.
+ * An Euler market has two EVaults:
+ *   - Collateral vault: wraps the collateral (deSPXA → edeSPXA-1).
+ *     Users deposit here; shares are used as collateral.
+ *   - Borrow vault: wraps the borrowable asset (USDC → eUSDC-86).
+ *     Users deposit for yield; borrowers draw from here.
  *
- * We read ERC-4626 totalAssets/totalBorrows from both, convert to USD using
- * the wrapper's NAV (passed in by the caller), and return a compact summary.
+ * Both vaults live in the same subgraph. We fetch both in one query and
+ * combine: supply/borrow/APY come from the borrow vault; collateral amount
+ * comes from the collateral vault.
+ *
+ * Subgraph docs: https://docs.euler.finance/developers/data-querying/subgraphs/
  */
 
-/** Tiny formatUnits — avoids pulling in viem just for this. */
-function formatUnits(value: bigint, decimals: number): string {
-  if (decimals <= 0) return value.toString();
-  const str = value.toString().padStart(decimals + 1, '0');
-  const whole = str.slice(0, -decimals);
-  const frac = str.slice(-decimals).replace(/0+$/, '');
-  return frac ? `${whole}.${frac}` : whole;
-}
+const EULER_BASE_SUBGRAPH =
+  'https://api.goldsky.com/api/public/project_cm4iagnemt1wp01xn4gh1agft/subgraphs/euler-v2-base/latest/gn';
 
 export interface EulerMarketStats {
-  /** The collateral vault address (eDeSPXA-1). */
   collateralVault: string;
-  /** The borrow vault address (eUSDC-86). */
   borrowVault: string;
-  /** Collateral symbol as reported by the vault. */
   collateralSymbol: string;
-  /** Loan symbol as reported by the borrow vault. */
   loanSymbol: string;
-  /** Collateral deposited, in USD. */
+  /** USD value of deSPXA collateral locked in the collateral vault. */
   collateralUsd: number;
-  /** USDC supplied to the borrow vault, in USD. */
+  /** USD supplied to the borrow vault (lenders). */
   supplyUsd: number;
-  /** USDC borrowed, in USD. */
+  /** USD borrowed from the borrow vault. */
   borrowUsd: number;
-  /** Utilization of the borrow vault (0..1). */
+  /** Utilization = borrow / supply (0..1). */
   utilization: number;
-  /** Annualized borrow APR from the IRM, approximated from the spot rate. */
-  borrowApr: number | null;
+  /** Annualized supply APY (0..1). */
+  supplyApy: number;
+  /** Annualized borrow APY (0..1). */
+  borrowApy: number;
+  /** Chainlink / Chronicle oracle address used to price collateral. */
+  oracleAddress: string;
 }
 
-interface EthCall {
-  to: string;
-  data: string;
+/** Tiny formatUnits — avoids a viem dependency. */
+function formatUnits(value: bigint, decimals: number): number {
+  if (decimals <= 0) return Number(value);
+  const divisor = BigInt(10) ** BigInt(decimals);
+  const whole = value / divisor;
+  const remainder = value % divisor;
+  return Number(whole) + Number(remainder) / Number(divisor);
 }
 
-/**
- * Base RPC — `BASE_RPC_URL` env var lets deployments swap in Alchemy or
- * another paid provider. Falls back to `base.drpc.org` which handles
- * batched requests without rate-limiting (unlike `mainnet.base.org` or
- * `base.llamarpc.com`).
- */
-const BASE_RPC_URL = process.env.BASE_RPC_URL ?? 'https://base.drpc.org';
-
-async function rpcCall(method: string, params: unknown[]): Promise<string> {
-  const res = await fetch(BASE_RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 }),
-  });
-  if (!res.ok) throw new Error(`Base RPC failed: ${res.status}`);
-  const json = await res.json();
-  if (json.error) throw new Error(json.error.message);
-  return json.result as string;
-}
-
-const eth_call = (call: EthCall) =>
-  rpcCall('eth_call', [{ to: call.to, data: call.data }, 'latest']);
-
-/**
- * Batched version of eth_call — sends multiple calls in one JSON-RPC batch
- * request, which works around strict per-request rate limits on public RPCs.
- */
-async function rpcBatch(calls: EthCall[]): Promise<string[]> {
-  const body = calls.map((c, i) => ({
-    jsonrpc: '2.0',
-    method: 'eth_call',
-    params: [{ to: c.to, data: c.data }, 'latest'],
-    id: i,
-  }));
-  const res = await fetch(BASE_RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Base RPC batch failed: ${res.status}`);
-  const json = await res.json();
-  if (!Array.isArray(json)) {
-    throw new Error(`Base RPC batch returned non-array: ${JSON.stringify(json).slice(0, 100)}`);
-  }
-  // Responses may come back out of order — sort by id.
-  json.sort((a: { id: number }, b: { id: number }) => a.id - b.id);
-  return json.map((r: { result?: string; error?: { message: string } }) => {
-    if (r.error) throw new Error(r.error.message);
-    return r.result ?? '0x';
-  });
-}
-
-// Function selectors (first 4 bytes of keccak256)
-const SEL = {
-  symbol: '0x95d89b41',
-  decimals: '0x313ce567',
-  totalAssets: '0x01e1d114',
-  totalBorrows: '0x47bd3718',
-  interestRate: '0x7c3a00fd', // uint256 interestRate() — per-second rate in ray
-};
-
-function hexToNumber(hex: string): bigint {
-  if (!hex || hex === '0x') return BigInt(0);
-  return BigInt(hex);
-}
-
-function decodeString(hex: string): string {
-  if (!hex || hex === '0x') return '';
+function safeBigInt(value: string | null | undefined): bigint {
+  if (!value) return BigInt(0);
   try {
-    const bytes = Buffer.from(hex.slice(2), 'hex');
-    // ERC20 symbol is either raw bytes32 or abi-encoded string.
-    // Heuristic: if the offset word exists, decode as string.
-    if (bytes.length >= 64) {
-      const length = Number(BigInt(`0x${bytes.slice(32, 64).toString('hex')}`));
-      if (length > 0 && length < 100) {
-        return bytes.slice(64, 64 + length).toString('utf-8').replace(/\0/g, '').trim();
-      }
-    }
-    return bytes.toString('utf-8').replace(/\0/g, '').trim();
+    return BigInt(value);
   } catch {
-    return '';
+    return BigInt(0);
   }
 }
 
+interface VaultNode {
+  id: string;
+  name: string;
+  symbol: string;
+  asset: string;
+  oracle: string;
+  state: {
+    totalShares: string;
+    totalBorrows: string;
+    cash: string;
+    supplyApy: string;
+    borrowApy: string;
+  } | null;
+}
+
 /**
- * Read an Euler market's live state from two EVault addresses.
- * Returns `null` if any required read fails — caller should gracefully hide
- * the Euler section in that case rather than showing partial data.
+ * Fetch live state for an Euler market given its two vault addresses.
+ *
+ * @param collateralVault  The EVault that holds the collateral (deSPXA).
+ * @param borrowVault      The EVault users borrow from (USDC).
+ * @param navUsd           Wrapper NAV — used to convert collateral shares to USD.
+ * @param collateralDecimals  Decimals of the underlying collateral token (18 for deSPXA).
+ * @param loanDecimals     Decimals of the loan asset (6 for USDC).
  */
 export async function getEulerMarketStats(
   collateralVault: string,
   borrowVault: string,
   navUsd: number,
+  collateralDecimals = 18,
   loanDecimals = 6,
 ): Promise<EulerMarketStats | null> {
+  const query = `
+    query EulerVaults($ids: [ID!]!) {
+      eulerVaults(where: { id_in: $ids }) {
+        id
+        name
+        symbol
+        asset
+        oracle
+        state {
+          totalShares
+          totalBorrows
+          cash
+          supplyApy
+          borrowApy
+        }
+      }
+    }
+  `;
+  const ids = [collateralVault.toLowerCase(), borrowVault.toLowerCase()];
+
   try {
-    // One batched JSON-RPC request instead of seven — avoids public-RPC
-    // rate limits when this runs on Vercel.
-    const [
-      collSymbolHex,
-      collDecHex,
-      collTotalAssetsHex,
-      loanSymbolHex,
-      loanTotalAssetsHex,
-      loanTotalBorrowsHex,
-      loanIrHex,
-    ] = await rpcBatch([
-      { to: collateralVault, data: SEL.symbol },
-      { to: collateralVault, data: SEL.decimals },
-      { to: collateralVault, data: SEL.totalAssets },
-      { to: borrowVault, data: SEL.symbol },
-      { to: borrowVault, data: SEL.totalAssets },
-      { to: borrowVault, data: SEL.totalBorrows },
-      { to: borrowVault, data: SEL.interestRate },
-    ]).catch(() => ['0x', '0x', '0x', '0x', '0x', '0x', '0x']);
-    void eth_call; // keep the single-call helper available for future use
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(EULER_BASE_SUBGRAPH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { ids } }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
 
-    const collDecimals = Number(hexToNumber(collDecHex));
-    const collRaw = hexToNumber(collTotalAssetsHex);
-    const loanSupplyRaw = hexToNumber(loanTotalAssetsHex);
-    const loanBorrowRaw = hexToNumber(loanTotalBorrowsHex);
+    const json = await res.json();
+    const vaults = (json?.data?.eulerVaults ?? []) as VaultNode[];
+    const collVault = vaults.find((v) => v.id.toLowerCase() === collateralVault.toLowerCase());
+    const loanVault = vaults.find((v) => v.id.toLowerCase() === borrowVault.toLowerCase());
+    if (!collVault || !loanVault) return null;
 
-    const collAmt = Number(formatUnits(collRaw, collDecimals || 18));
-    const loanSupply = Number(formatUnits(loanSupplyRaw, loanDecimals));
-    const loanBorrow = Number(formatUnits(loanBorrowRaw, loanDecimals));
+    // Collateral vault: totalShares ≈ totalAssets when share price is 1:1.
+    // For an edeSPXA-1 vault with no borrows this is a good enough proxy.
+    const collShares = safeBigInt(collVault.state?.totalShares);
+    const collAmount = formatUnits(collShares, collateralDecimals);
 
-    // Euler's interestRate() returns per-second interest as a ray (1e27).
-    // APR = rate * seconds_per_year / 1e27. Null when we can't read it.
-    const irRay = hexToNumber(loanIrHex);
-    const SECONDS_PER_YEAR = BigInt(31536000);
-    const RAY = BigInt(10) ** BigInt(27);
-    const SCALE = BigInt(10000);
-    const borrowApr =
-      irRay > BigInt(0)
-        ? Number((irRay * SECONDS_PER_YEAR * SCALE) / RAY) / 10000
-        : null;
+    // Borrow vault: supply = cash + totalBorrows. (cash is what's lent-out-able.)
+    const loanCash = safeBigInt(loanVault.state?.cash);
+    const loanBorrows = safeBigInt(loanVault.state?.totalBorrows);
+    const loanSupply = loanCash + loanBorrows;
 
-    const utilization = loanSupply > 0 ? loanBorrow / loanSupply : 0;
+    const supplyUsd = formatUnits(loanSupply, loanDecimals); // USDC is $1
+    const borrowUsd = formatUnits(loanBorrows, loanDecimals);
+    const utilization = supplyUsd > 0 ? borrowUsd / supplyUsd : 0;
+
+    // Euler APYs come back as ray-scaled (1e27) strings.
+    const RAY_SCALE = 1e27;
+    const supplyApy = Number(loanVault.state?.supplyApy ?? 0) / RAY_SCALE;
+    const borrowApy = Number(loanVault.state?.borrowApy ?? 0) / RAY_SCALE;
 
     return {
       collateralVault,
       borrowVault,
-      collateralSymbol: decodeString(collSymbolHex) || 'eDeSPXA',
-      loanSymbol: decodeString(loanSymbolHex) || 'eUSDC',
-      collateralUsd: collAmt * navUsd,
-      supplyUsd: loanSupply, // USDC is 1:1 with USD
-      borrowUsd: loanBorrow,
+      collateralSymbol: collVault.symbol || 'edeSPXA',
+      loanSymbol: loanVault.symbol || 'eUSDC',
+      collateralUsd: collAmount * navUsd,
+      supplyUsd,
+      borrowUsd,
       utilization,
-      borrowApr,
+      supplyApy,
+      borrowApy,
+      oracleAddress: loanVault.oracle ?? '',
     };
   } catch (err) {
-    console.error('[euler] reader failed', err);
+    console.error('[euler] subgraph query failed', err);
     return null;
   }
 }

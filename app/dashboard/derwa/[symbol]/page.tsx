@@ -352,10 +352,10 @@ export default function DerwaDetailPage() {
                 <div style={{ color: 'var(--text-muted)' }}>util</div>
               </div>
               <div className="text-right">
-                <div className="font-bold num-negative">
-                  {w.euler.borrowApr != null && w.euler.borrowApr > 0 ? `${(w.euler.borrowApr * 100).toFixed(2)}%` : '—'}
+                <div className="font-bold num-positive">
+                  {w.euler.supplyApy > 0 ? `${(w.euler.supplyApy * 100).toFixed(2)}%` : '—'}
                 </div>
-                <div style={{ color: 'var(--text-muted)' }}>borrow APR</div>
+                <div style={{ color: 'var(--text-muted)' }}>supply APY</div>
               </div>
               <StatusPill status="live" />
               <span style={{ color: 'var(--text-muted)' }}>↗</span>
