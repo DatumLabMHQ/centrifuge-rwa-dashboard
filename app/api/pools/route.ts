@@ -3,6 +3,8 @@ import { globalCache } from '@/lib/sdk/cache';
 import { getAllPools, getRecentFlowTransactions } from '@/lib/data/centrifuge';
 import { aggregatePools } from '@/lib/data/aggregate';
 import { buildClassifierMap } from '@/lib/data/ipfs';
+import { getAllOnchainSupplies } from '@/lib/data/onchain/supply';
+import { reconcileAll, summarizeQuality } from '@/lib/data/reconcile';
 import type { PoolsData } from '@/lib/data/types';
 
 const CACHE_KEY = 'centrifuge:pools';
@@ -26,8 +28,26 @@ export async function GET() {
       getRecentFlowTransactions(1000),
     ]);
 
-    const classifier = await buildClassifierMap(pools);
-    const data = aggregatePools(pools, transactions, classifier);
+    const navBySymbol: Record<string, number> = {};
+    for (const p of pools) {
+      for (const t of p.tokens.items) {
+        const price = Number(t.tokenPrice ?? 0) / 1e18;
+        if (price > 0) navBySymbol[t.symbol] = price;
+      }
+    }
+
+    const [classifier, onchainSupplies] = await Promise.all([
+      buildClassifierMap(pools),
+      getAllOnchainSupplies(navBySymbol).catch(() => ({})),
+    ]);
+
+    const base = aggregatePools(pools, transactions, classifier, onchainSupplies);
+    const tokens = reconcileAll({ pools, onchainSupplies });
+    const summary = summarizeQuality(tokens);
+    const data: PoolsData = {
+      ...base,
+      dataQuality: { summary, tokens },
+    };
     globalCache.set(CACHE_KEY, data);
 
     return NextResponse.json({ ...data, cached: false });

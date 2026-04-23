@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
+import DataQualityBadge from '@/components/ui/DataQualityBadge';
 
 /** Bright-theme chart palette — picked to read well on white. */
 const CHART_COLORS = [
@@ -144,21 +145,24 @@ export default function OverviewPage() {
         title="Overview"
         subtitle="Total tokenized RWA on Centrifuge V3 — live across 9 chains."
         right={
-          crossCheck !== null && (
-            <div
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-semibold"
-              style={{
-                background: 'var(--accent-green-soft)',
-                color: 'var(--accent-green)',
-              }}
-            >
-              <span>VERIFIED vs DEFILLAMA</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {crossCheck >= 0 ? '+' : ''}
-                {crossCheck.toFixed(2)}%
-              </span>
-            </div>
-          )
+          <div className="flex items-center gap-2 flex-wrap">
+            {data?.dataQuality && <DataQualityBadge report={data.dataQuality} />}
+            {crossCheck !== null && (
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-semibold"
+                style={{
+                  background: 'var(--accent-green-soft)',
+                  color: 'var(--accent-green)',
+                }}
+              >
+                <span>VERIFIED vs DEFILLAMA</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {crossCheck >= 0 ? '+' : ''}
+                  {crossCheck.toFixed(2)}%
+                </span>
+              </div>
+            )}
+          </div>
         }
       />
 

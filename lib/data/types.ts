@@ -224,6 +224,8 @@ export interface DerwaData {
   totalInstTvl: number;
   totalWrapRatio: number;
   totalHolders: number;
+  /** Tier 1 vs Tier 2 reconciliation. Undefined when reconciliation skipped. */
+  dataQuality?: DataQualityReport | null;
   lastUpdated: string;
 }
 
@@ -304,6 +306,8 @@ export interface DerwaDetailData {
   }>;
   /** Live Morpho market stats — null if no Morpho market or fetch failed. */
   morpho: MorphoMarketData | null;
+  /** Data-quality entry for this wrapper's symbol. Undefined when reconciliation skipped. */
+  dataQuality?: DataQualityEntry | null;
   windowDays: number;
   lastUpdated: string;
 }
@@ -316,6 +320,40 @@ export interface CrossChainFlowData {
   totalVolumeUsd: number;
   txCount: number;
   windowDays: number;
+}
+
+/**
+ * Quality tier for a single token's supply read. Populated by
+ * `lib/data/reconcile.ts` which compares Tier 1 (on-chain) vs Tier 2
+ * (Centrifuge indexer). Consumed by UI badges.
+ */
+export type DataQualityLevel = 'ok' | 'degraded' | 'broken';
+
+export interface DataQualityEntry {
+  symbol: string;
+  onchainSupply: number;
+  indexerIssuance: number;
+  divergence: number;
+  quality: DataQualityLevel;
+  chainsOk: number;
+  chainsFailed: number;
+  source: 'onchain' | 'indexer' | 'none';
+  message: string;
+}
+
+export interface DataQualitySummary {
+  ok: number;
+  degraded: number;
+  broken: number;
+  total: number;
+  hasBroken: boolean;
+  hasIssues: boolean;
+}
+
+export interface DataQualityReport {
+  summary: DataQualitySummary;
+  /** Keyed by token symbol. */
+  tokens: Record<string, DataQualityEntry>;
 }
 
 /** Aggregated overview payload returned by /api/overview */
@@ -335,6 +373,8 @@ export interface OverviewData {
     tvlUsd: number;
     chains: string[];
   }>;
+  /** Tier 1 vs Tier 2 reconciliation. Undefined when reconciliation skipped. */
+  dataQuality?: DataQualityReport | null;
   lastUpdated: string;
 }
 
@@ -366,6 +406,7 @@ export interface PoolRow {
 
 export interface PoolsData {
   pools: PoolRow[];
+  dataQuality?: DataQualityReport | null;
   lastUpdated: string;
 }
 

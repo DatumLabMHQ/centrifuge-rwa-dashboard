@@ -13,6 +13,7 @@ import { ErrorState, TuiPanel } from '@/components/sdk';
 import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { DerwaData, DerwaWrapperRow } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
+import DataQualityBadge from '@/components/ui/DataQualityBadge';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
 
@@ -84,7 +85,12 @@ export default function DerwaPage() {
             ? `${data.wrappers.length} freely-transferable wrappers · ${formatCurrency(data.totalDerwaTvl)} total · ${(data.totalWrapRatio * 100).toFixed(2)}% of underlying institutional pools`
             : 'Loading wrapper data…'
         }
-        right={<TimeSlicer value={range} onChange={setRange} />}
+        right={
+          <div className="flex items-center gap-2 flex-wrap">
+            {data?.dataQuality && <DataQualityBadge report={data.dataQuality} />}
+            <TimeSlicer value={range} onChange={setRange} />
+          </div>
+        }
       />
 
       {/* ─── Page-level summary tiles ─── */}

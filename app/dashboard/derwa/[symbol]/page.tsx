@@ -28,6 +28,7 @@ import { ErrorState } from '@/components/sdk';
 import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
+import DataQualityBadge from '@/components/ui/DataQualityBadge';
 import { ChartPanel } from '@/components/ChartPanel';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
@@ -94,7 +95,12 @@ export default function DerwaDetailPage() {
             ? `${w.name} · wraps ${w.instSymbol} · ${w.manager}`
             : 'Loading…'
         }
-        right={<TimeSlicer value={range} onChange={setRange} />}
+        right={
+          <div className="flex items-center gap-2 flex-wrap">
+            {data?.dataQuality && <DataQualityBadge entry={data.dataQuality} />}
+            <TimeSlicer value={range} onChange={setRange} />
+          </div>
+        }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

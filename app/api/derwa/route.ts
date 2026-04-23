@@ -9,8 +9,10 @@ import {
 import { getDefiLlamaPool } from '@/lib/data/defillama-yields';
 import { getDexPoolStats } from '@/lib/data/geckoterminal';
 import { getEulerMarketStats, type EulerMarketStats } from '@/lib/data/euler';
+import { getAllOnchainSupplies } from '@/lib/data/onchain/supply';
 import { aggregateDerwa } from '@/lib/data/derwa-aggregate';
 import { getDerwaContext } from '@/lib/data/derwa-context';
+import { reconcileAll, summarizeQuality } from '@/lib/data/reconcile';
 import type { DerwaData } from '@/lib/data/types';
 
 const DEFAULT_TTL_S = 300;
@@ -81,15 +83,18 @@ export async function GET(request: Request) {
       }
     }
 
-    // Euler on-chain reads — need NAV per wrapper for collateral valuation.
-    const navBySymbol = new Map<string, number>();
+    // Build a nav-by-symbol map covering every token the indexer knows —
+    // used for USD conversion in the Euler reader and the on-chain supply
+    // reader (institutional tokens need NAVs too, not just wrappers).
+    const navBySymbol: Record<string, number> = {};
     for (const p of pools) {
       for (const t of p.tokens.items) {
-        if (WRAPPER_SYMBOLS.includes(t.symbol)) {
-          navBySymbol.set(t.symbol, Number(t.tokenPrice) / 1e18);
-        }
+        const price = Number(t.tokenPrice ?? 0) / 1e18;
+        if (price > 0) navBySymbol[t.symbol] = price;
       }
     }
+
+    // Euler on-chain reads for each live Euler lending integration.
     const eulerStats = new Map<string, EulerMarketStats | null>();
     for (const sym of WRAPPER_SYMBOLS) {
       const ctx = getDerwaContext(sym);
@@ -102,12 +107,17 @@ export async function GET(request: Request) {
       const match = euler.url.match(/\/borrow\/(0x[a-fA-F0-9]+)\/(0x[a-fA-F0-9]+)/);
       if (!match) continue;
       const [, collateralVault, borrowVault] = match;
-      const nav = navBySymbol.get(sym) ?? 0;
+      const nav = navBySymbol[sym] ?? 0;
       const stats = await getEulerMarketStats(collateralVault, borrowVault, nav);
       eulerStats.set(sym, stats);
     }
 
-    const data = aggregateDerwa({
+    // Tier 1: authoritative on-chain supply (reads totalSupply from every
+    // deployment of every deRWA + institutional token). Best-effort — if the
+    // call fails, the aggregator falls back to indexer data.
+    const onchainSupplies = await getAllOnchainSupplies(navBySymbol).catch(() => ({}));
+
+    const base = aggregateDerwa({
       pools,
       transactions,
       positions,
@@ -115,8 +125,16 @@ export async function GET(request: Request) {
       dexPools,
       geckoStats,
       eulerStats,
+      onchainSupplies,
       windowDays: days,
     });
+
+    const tokens = reconcileAll({ pools, onchainSupplies });
+    const summary = summarizeQuality(tokens);
+    const data: DerwaData = {
+      ...base,
+      dataQuality: { summary, tokens },
+    };
 
     globalCache.set(cacheKey, data);
     return NextResponse.json({ ...data, cached: false });

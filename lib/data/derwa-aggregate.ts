@@ -28,6 +28,7 @@ import type { TokenSnapshot } from '@/lib/data/centrifuge';
 import type { DefiLlamaPool } from '@/lib/data/defillama-yields';
 import type { GeckoPoolStats } from '@/lib/data/geckoterminal';
 import type { EulerMarketStats } from '@/lib/data/euler';
+import type { TokenSupplySnapshot } from '@/lib/data/onchain/supply';
 
 /* ─── BigInt helpers (copied from aggregate.ts so derwa is self-contained) ── */
 
@@ -70,6 +71,11 @@ export interface AggregateDerwaInput {
   geckoStats: Map<string, GeckoPoolStats | null>;
   /** Map of `wrapperSymbol → Euler market stats` (null when no market). */
   eulerStats: Map<string, EulerMarketStats | null>;
+  /** Map of `tokenSymbol → onchain supply snapshot` — Tier 1 source of truth.
+   *  When a wrapper or institutional token has a snapshot here, the aggregator
+   *  prefers it over Centrifuge's indexer values. Falls back to the indexer
+   *  when onchain data is unavailable (RPC failure). */
+  onchainSupplies?: Record<string, TokenSupplySnapshot>;
   windowDays: number;
 }
 
@@ -112,30 +118,57 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
     if (!wrapper) continue;
 
     const { pool, token } = wrapper;
+    const navUsd = priceUsd(token.tokenPrice);
 
-    // Per-chain breakdown
-    const chains = token.tokenInstances.items
-      .map((inst) => {
-        const supply = bn(inst.totalIssuance, token.decimals);
-        const tvlUsd = supply * priceUsd(inst.tokenPrice);
-        return {
-          name: inst.blockchain.name,
-          chainId: inst.blockchain.chainId,
-          supply,
-          tvlUsd,
-          address: inst.address,
-        };
+    // Per-chain breakdown — on-chain first, indexer as fallback.
+    const onchain = input.onchainSupplies?.[sym];
+    const indexerChains = token.tokenInstances.items.map((inst) => ({
+      name: inst.blockchain.name,
+      chainId: inst.blockchain.chainId,
+      supply: bn(inst.totalIssuance, token.decimals),
+      tvlUsd: bn(inst.totalIssuance, token.decimals) * priceUsd(inst.tokenPrice),
+      address: inst.address,
+    }));
+
+    // Merge: prefer on-chain totalSupply per chain, keeping the indexer's
+    // chain name + address for display. If on-chain failed for a chain,
+    // fall back to the indexer value for that chain.
+    const chains = indexerChains
+      .map((idx) => {
+        const onchainChain = onchain?.perChain.find(
+          (c) =>
+            c.chain.toLowerCase() === idx.name.toLowerCase() ||
+            (c.chain === 'bsc' && idx.name === 'binance'),
+        );
+        if (onchainChain && !onchainChain.failed) {
+          return {
+            ...idx,
+            supply: onchainChain.supply,
+            tvlUsd: onchainChain.supply * navUsd,
+          };
+        }
+        return idx;
       })
       .filter((c) => c.supply > 0)
       .sort((a, b) => b.tvlUsd - a.tvlUsd);
 
-    const tvlUsd = chains.reduce((s, c) => s + c.tvlUsd, 0);
-    const totalSupply = chains.reduce((s, c) => s + c.supply, 0);
-    const navUsd = priceUsd(token.tokenPrice);
+    // Prefer the on-chain rollup (sum across all registered deployments)
+    // over the per-chain sum from the indexer, since the indexer can miss
+    // deployments entirely (not just report them as 0).
+    const tvlUsd = onchain?.totalTvlUsd ?? chains.reduce((s, c) => s + c.tvlUsd, 0);
+    const totalSupply = onchain?.totalSupply ?? chains.reduce((s, c) => s + c.supply, 0);
 
-    // Wrap ratio vs the institutional pool
+    // Wrap ratio vs the institutional pool — use on-chain inst TVL when
+    // available, falling back to the indexer.
+    const instOnchain = ctx.instSymbol ? input.onchainSupplies?.[ctx.instSymbol] : undefined;
     const inst = poolBySymbol.get(ctx.instSymbol);
-    const instTvlUsd = inst ? tokenTvlUsd(inst.token) : null;
+    const instNav = inst ? priceUsd(inst.token.tokenPrice) : 0;
+    const instTvlUsd =
+      instOnchain && instNav > 0
+        ? instOnchain.totalSupply * instNav
+        : inst
+          ? tokenTvlUsd(inst.token)
+          : null;
     const wrapRatio =
       instTvlUsd != null && instTvlUsd > 0 ? tvlUsd / instTvlUsd : null;
 

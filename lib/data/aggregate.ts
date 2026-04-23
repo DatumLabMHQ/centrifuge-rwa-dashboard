@@ -145,7 +145,26 @@ export function aggregateOverview(
   pools: Pool[],
   transactions: InvestorTransaction[],
   metadataMap?: ClassifierMap,
+  onchainSupplies?: Record<string, { totalSupply: number; totalTvlUsd: number; perChain: Array<{ chain: string; chainId: number; supply: number }> }>,
 ): OverviewData {
+  // Helper: resolve tvl for a token, preferring on-chain over indexer.
+  const tokenTvl = (t: Token): number => {
+    const onchain = onchainSupplies?.[t.symbol];
+    if (onchain && onchain.totalTvlUsd > 0) return onchain.totalTvlUsd;
+    return tokenTvlUsd(t);
+  };
+  const instanceTvl = (inst: TokenInstance, t: Token): number => {
+    const onchain = onchainSupplies?.[t.symbol];
+    const match = onchain?.perChain.find(
+      (c) =>
+        c.chain.toLowerCase() === inst.blockchain.name.toLowerCase() ||
+        (c.chain === 'bsc' && inst.blockchain.name === 'binance'),
+    );
+    const nav = priceUsd(t.tokenPrice);
+    if (match && nav > 0) return match.supply * nav;
+    return instanceTvlUsd(inst, t.decimals);
+  };
+
   // ─── per-pool aggregation ───
   type Acc = {
     pool: Pool;
@@ -158,10 +177,14 @@ export function aggregateOverview(
     const chains = new Set<string>();
     let tvlUsd = 0;
     for (const t of p.tokens.items) {
-      tvlUsd += tokenTvlUsd(t);
-      for (const inst of t.tokenInstances.items) {
-        if (Number(inst.totalIssuance) > 0) {
-          chains.add(inst.blockchain.name);
+      tvlUsd += tokenTvl(t);
+      const onchain = onchainSupplies?.[t.symbol];
+      if (onchain) {
+        // Trust on-chain: every chain with supply > 0 is active.
+        for (const c of onchain.perChain) if (c.supply > 0) chains.add(c.chain);
+      } else {
+        for (const inst of t.tokenInstances.items) {
+          if (Number(inst.totalIssuance) > 0) chains.add(inst.blockchain.name);
         }
       }
     }
@@ -175,7 +198,7 @@ export function aggregateOverview(
   for (const p of pools) {
     for (const t of p.tokens.items) {
       for (const inst of t.tokenInstances.items) {
-        const tvl = instanceTvlUsd(inst, t.decimals);
+        const tvl = instanceTvl(inst, t);
         if (tvl <= 0) continue;
         const key = inst.blockchain.name;
         const cur = chainMap.get(key);
@@ -277,6 +300,7 @@ export function aggregatePools(
   pools: Pool[],
   transactions: InvestorTransaction[],
   metadataMap?: ClassifierMap,
+  onchainSupplies?: Record<string, { totalSupply: number; totalTvlUsd: number; perChain: Array<{ chain: string; supply: number }> }>,
 ): PoolsData {
   const tokenInfo = buildTokenInfoMap(pools);
   const flows = flowsByTokenId(transactions, tokenInfo);
@@ -285,23 +309,35 @@ export function aggregatePools(
     const token = primaryToken(pool);
     if (!token) return [];
 
+    const nav = priceUsd(token.tokenPrice);
+    const onchain = onchainSupplies?.[token.symbol];
+
+    // Per-chain breakdown: on-chain supply per chain when available,
+    // indexer fallback otherwise.
     const chainBreakdown = token.tokenInstances.items
       .map((inst) => {
-        const supply = bn(inst.totalIssuance, token.decimals);
-        const tvl = supply * priceUsd(inst.tokenPrice);
+        const idxSupply = bn(inst.totalIssuance, token.decimals);
+        const onchainChain = onchain?.perChain.find(
+          (c) =>
+            c.chain.toLowerCase() === inst.blockchain.name.toLowerCase() ||
+            (c.chain === 'bsc' && inst.blockchain.name === 'binance'),
+        );
+        const supply = onchainChain ? onchainChain.supply : idxSupply;
         return {
           name: inst.blockchain.name,
           chainId: inst.blockchain.chainId,
           supply,
-          tvlUsd: tvl,
+          tvlUsd: supply * nav,
           address: inst.address,
         };
       })
       .filter((c) => c.supply > 0)
       .sort((a, b) => b.tvlUsd - a.tvlUsd);
 
-    const tvlUsd = chainBreakdown.reduce((s, c) => s + c.tvlUsd, 0);
-    const totalSupply = chainBreakdown.reduce((s, c) => s + c.supply, 0);
+    // Use on-chain totals when available — this covers tokens whose
+    // tokenInstances array is empty or stale in the indexer.
+    const tvlUsd = onchain?.totalTvlUsd ?? chainBreakdown.reduce((s, c) => s + c.tvlUsd, 0);
+    const totalSupply = onchain?.totalSupply ?? chainBreakdown.reduce((s, c) => s + c.supply, 0);
     const flowAcc = flows.get(token.id) ?? { netUsd: 0, count: 0 };
 
     return [

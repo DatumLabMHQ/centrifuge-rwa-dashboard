@@ -10,6 +10,7 @@ import { formatAddress } from '@/lib/sdk/helpers';
 import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { PoolRow, PoolsData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
+import DataQualityBadge from '@/components/ui/DataQualityBadge';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 
 type SortKey = 'tvlUsd' | 'flows30dUsd' | 'tokenPriceUsd' | 'name';
@@ -95,7 +96,8 @@ export default function PoolsPage() {
         title="Pools"
         subtitle={`${filtered.length} of ${totalPools} pools · ${formatCurrency(totalTvl)} visible TVL`}
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {pools.data?.dataQuality && <DataQualityBadge report={pools.data.dataQuality} />}
             <select
               className="tui-select"
               value={chainFilter}
