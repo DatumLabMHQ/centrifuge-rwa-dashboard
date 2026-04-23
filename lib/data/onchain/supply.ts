@@ -11,6 +11,7 @@
  * deCRDX, SPXA), the on-chain reader still reports the correct number.
  */
 
+import { globalCache } from '@/lib/sdk/cache';
 import {
   ALL_TOKENS,
   CHAINS,
@@ -25,6 +26,17 @@ import {
   formatTokenAmount,
   SEL,
 } from './rpc';
+
+const CACHE_KEY = 'centrifuge:onchain:supplies';
+/**
+ * Cross-route on-chain snapshot cache TTL. We want every route hit within
+ * this window to see the same numbers so /api/pools and /api/derwa can't
+ * disagree because they fetched at different times. 4 minutes aligns with
+ * the 5-minute TTL on the per-route caches so the supplies snapshot is
+ * never the stale one — every route TTL expiry forces a fresh supplies
+ * read.
+ */
+const SUPPLIES_TTL_MS = 240_000;
 
 export interface ChainSupply {
   chain: ChainKey;
@@ -118,10 +130,37 @@ export async function getOnchainTokenSupply(
 /**
  * Read every token in the registry in parallel. Pass a `navBySymbol` map to
  * compute USD values — pass 0 for tokens without a NAV to get raw supply.
+ *
+ * Cached under a single key so every API route sees the same snapshot for
+ * the TTL window, preventing /api/pools and /api/derwa from disagreeing
+ * because they happened to refetch at different moments.
  */
 export async function getAllOnchainSupplies(
   navBySymbol: Record<string, number>,
 ): Promise<Record<string, TokenSupplySnapshot>> {
+  const cached = globalCache.get<Record<string, TokenSupplySnapshot>>(
+    CACHE_KEY,
+    SUPPLIES_TTL_MS,
+  );
+  if (cached) {
+    // Re-apply navUsd so tvlUsd fields reflect the freshest NAV — the
+    // cached `totalSupply` and `perChain[].supply` are the expensive part
+    // to fetch; tvlUsd is just multiplication we can redo cheaply.
+    const refreshed: Record<string, TokenSupplySnapshot> = {};
+    for (const [sym, snap] of Object.entries(cached)) {
+      const nav = navBySymbol[sym] ?? 0;
+      refreshed[sym] = {
+        ...snap,
+        totalTvlUsd: snap.totalSupply * nav,
+        perChain: snap.perChain.map((c) => ({
+          ...c,
+          tvlUsd: c.supply * nav,
+        })),
+      };
+    }
+    return refreshed;
+  }
+
   const symbols = Object.keys(ALL_TOKENS);
   const entries = await Promise.all(
     symbols.map(async (sym) => {
@@ -134,6 +173,7 @@ export async function getAllOnchainSupplies(
   for (const [sym, snap] of entries) {
     if (snap) out[sym] = snap;
   }
+  globalCache.set(CACHE_KEY, out);
   return out;
 }
 

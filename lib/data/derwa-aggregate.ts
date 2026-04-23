@@ -131,8 +131,10 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
     }));
 
     // Merge: prefer on-chain totalSupply per chain, keeping the indexer's
-    // chain name + address for display. If on-chain failed for a chain,
-    // fall back to the indexer value for that chain.
+    // chain name + address for display. If on-chain failed OR returned
+    // zero for a chain, fall back to the indexer value for that chain —
+    // a zero on-chain read is as likely to mean "RPC dropped the request"
+    // as "token has no supply there" and the indexer is the better guess.
     const chains = indexerChains
       .map((idx) => {
         const onchainChain = onchain?.perChain.find(
@@ -140,7 +142,7 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
             c.chain.toLowerCase() === idx.name.toLowerCase() ||
             (c.chain === 'bsc' && idx.name === 'binance'),
         );
-        if (onchainChain && !onchainChain.failed) {
+        if (onchainChain && !onchainChain.failed && onchainChain.supply > 0) {
           return {
             ...idx,
             supply: onchainChain.supply,
@@ -155,20 +157,37 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
     // Prefer the on-chain rollup (sum across all registered deployments)
     // over the per-chain sum from the indexer, since the indexer can miss
     // deployments entirely (not just report them as 0).
-    const tvlUsd = onchain?.totalTvlUsd ?? chains.reduce((s, c) => s + c.tvlUsd, 0);
-    const totalSupply = onchain?.totalSupply ?? chains.reduce((s, c) => s + c.supply, 0);
+    //
+    // BUT: if the on-chain rollup came back zero AND the per-chain sum has
+    // data (indexer fallback already applied by the merge above), use the
+    // chain sum instead. This matters for single-chain tokens like deCRDX
+    // where a single RPC failure would otherwise zero out the wrapper.
+    const chainSumTvl = chains.reduce((s, c) => s + c.tvlUsd, 0);
+    const chainSumSupply = chains.reduce((s, c) => s + c.supply, 0);
+    const tvlUsd =
+      onchain && onchain.totalTvlUsd > 0 ? onchain.totalTvlUsd : chainSumTvl;
+    const totalSupply =
+      onchain && onchain.totalSupply > 0 ? onchain.totalSupply : chainSumSupply;
 
     // Wrap ratio vs the institutional pool — use on-chain inst TVL when
     // available, falling back to the indexer.
     const instOnchain = ctx.instSymbol ? input.onchainSupplies?.[ctx.instSymbol] : undefined;
     const inst = poolBySymbol.get(ctx.instSymbol);
     const instNav = inst ? priceUsd(inst.token.tokenPrice) : 0;
-    const instTvlUsd =
-      instOnchain && instNav > 0
-        ? instOnchain.totalSupply * instNav
-        : inst
-          ? tokenTvlUsd(inst.token)
-          : null;
+    // Only trust on-chain inst TVL when supply is positive (zero means
+    // all chains failed) AND the result is at least as large as the
+    // wrapper itself — every wrapper is 1:1 backed by an inst token, so
+    // instTvl < wrapperTvl is definitionally a data-quality problem.
+    let instTvlUsd: number | null = null;
+    if (instOnchain && instOnchain.totalSupply > 0 && instNav > 0) {
+      const candidate = instOnchain.totalSupply * instNav;
+      if (candidate >= tvlUsd * 0.95) instTvlUsd = candidate;
+    }
+    if (instTvlUsd == null && inst) {
+      const candidate = tokenTvlUsd(inst.token);
+      // Same guard: indexer sometimes reports tiny values for broken tokens.
+      if (candidate >= tvlUsd * 0.95) instTvlUsd = candidate;
+    }
     const wrapRatio =
       instTvlUsd != null && instTvlUsd > 0 ? tvlUsd / instTvlUsd : null;
 

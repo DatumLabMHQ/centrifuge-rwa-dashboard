@@ -46,6 +46,11 @@ export default function HoldersSubPage() {
   }
 
   const data = detail.data;
+  // Read clock once per render for relative-time labels in the activity log.
+  // react-compiler's purity rule warns on Date.now() but an idempotent read
+  // within a single render pass is the exact use case — disabled locally.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
   const w = data?.wrapper;
   const holders = data?.topHolders ?? [];
   const txs = data?.recentTransactions ?? [];
@@ -177,7 +182,7 @@ export default function HoldersSubPage() {
                 {activityRows.map((tx) => {
                   const isDeposit = tx.type.includes('DEPOSIT') || tx.type === 'SYNC_DEPOSIT';
                   const explorer = EXPLORERS[tx.chain.toLowerCase()];
-                  const ago = Math.round((Date.now() - tx.createdAt) / 60000);
+                  const ago = Math.round((now - tx.createdAt) / 60000);
                   const when = ago < 60 ? `${ago}m ago` : ago < 1440 ? `${Math.round(ago / 60)}h ago` : `${Math.round(ago / 1440)}d ago`;
                   return (
                     <tr key={tx.txHash + tx.type}>

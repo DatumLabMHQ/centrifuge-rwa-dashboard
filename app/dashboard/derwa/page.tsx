@@ -47,16 +47,8 @@ export default function DerwaPage() {
     queryFn: () => fetchDerwa(days),
   });
 
-  if (derwa.isError) {
-    return (
-      <ErrorState
-        message={derwa.error instanceof Error ? derwa.error.message : 'Failed to load deRWA data.'}
-        onRetry={() => derwa.refetch()}
-      />
-    );
-  }
-
   const data = derwa.data;
+  // Must run before any early returns so hook order stays stable across renders.
   const wrappers = useMemo(() => {
     const list = data?.wrappers ?? [];
     const sorted = [...list].sort((a, b) => {
@@ -66,6 +58,15 @@ export default function DerwaPage() {
     });
     return sorted;
   }, [data, sortKey, sortDir]);
+
+  if (derwa.isError) {
+    return (
+      <ErrorState
+        message={derwa.error instanceof Error ? derwa.error.message : 'Failed to load deRWA data.'}
+        onRetry={() => derwa.refetch()}
+      />
+    );
+  }
 
   const setSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(sortDir === 'desc' ? 'asc' : 'desc');

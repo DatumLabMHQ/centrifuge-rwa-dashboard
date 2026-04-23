@@ -161,7 +161,10 @@ export function aggregateOverview(
         (c.chain === 'bsc' && inst.blockchain.name === 'binance'),
     );
     const nav = priceUsd(t.tokenPrice);
-    if (match && nav > 0) return match.supply * nav;
+    // Only trust the on-chain value when it's actually positive. A zero
+    // could mean "chain RPC failed" just as easily as "token really has
+    // zero supply on this chain" — fall back to the indexer to be safe.
+    if (match && nav > 0 && match.supply > 0) return match.supply * nav;
     return instanceTvlUsd(inst, t.decimals);
   };
 
@@ -322,7 +325,10 @@ export function aggregatePools(
             c.chain.toLowerCase() === inst.blockchain.name.toLowerCase() ||
             (c.chain === 'bsc' && inst.blockchain.name === 'binance'),
         );
-        const supply = onchainChain ? onchainChain.supply : idxSupply;
+        // Prefer on-chain only when it's positive — zero usually means the
+        // RPC failed rather than "no supply here," so fall back to indexer.
+        const supply =
+          onchainChain && onchainChain.supply > 0 ? onchainChain.supply : idxSupply;
         return {
           name: inst.blockchain.name,
           chainId: inst.blockchain.chainId,
@@ -336,8 +342,15 @@ export function aggregatePools(
 
     // Use on-chain totals when available — this covers tokens whose
     // tokenInstances array is empty or stale in the indexer.
-    const tvlUsd = onchain?.totalTvlUsd ?? chainBreakdown.reduce((s, c) => s + c.tvlUsd, 0);
-    const totalSupply = onchain?.totalSupply ?? chainBreakdown.reduce((s, c) => s + c.supply, 0);
+    // If the on-chain rollup is zero (e.g. all chains timed out) and the
+    // chain breakdown has data (indexer fallback per chain), use the chain
+    // sum instead. `??` only catches null, not zero.
+    const chainSumTvl = chainBreakdown.reduce((s, c) => s + c.tvlUsd, 0);
+    const chainSumSupply = chainBreakdown.reduce((s, c) => s + c.supply, 0);
+    const tvlUsd =
+      onchain && onchain.totalTvlUsd > 0 ? onchain.totalTvlUsd : chainSumTvl;
+    const totalSupply =
+      onchain && onchain.totalSupply > 0 ? onchain.totalSupply : chainSumSupply;
     const flowAcc = flows.get(token.id) ?? { netUsd: 0, count: 0 };
 
     return [

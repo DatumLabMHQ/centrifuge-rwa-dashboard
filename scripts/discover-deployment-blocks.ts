@@ -6,7 +6,7 @@
  * Run: npx tsx scripts/discover-deployment-blocks.ts
  */
 
-import { ALL_TOKENS, CHAINS, type ChainKey } from '../lib/data/onchain/registry';
+import { ALL_TOKENS, type ChainKey } from '../lib/data/onchain/registry';
 import { getLatestBlock, rpcUrl } from '../lib/data/onchain/rpc';
 
 async function getCode(chain: ChainKey, addr: string, block: number): Promise<string> {

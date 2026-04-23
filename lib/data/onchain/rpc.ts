@@ -125,7 +125,6 @@ export async function getLogs(
   if (params.toBlock != null) rpcParams.toBlock = toHex(params.toBlock);
 
   const maxRetries = opts.retries ?? 2;
-  let lastErr: unknown = null;
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15000);
@@ -144,7 +143,6 @@ export async function getLogs(
       if (!res.ok) {
         // 429 / 502 / 503 → back off and retry.
         if (res.status === 429 || res.status >= 500) {
-          lastErr = new Error(`HTTP ${res.status}`);
           await sleep(200 * (attempt + 1));
           continue;
         }
@@ -155,15 +153,13 @@ export async function getLogs(
         // Many RPCs return rate-limit errors inside a 200 body.
         const msg = String(json.error.message ?? '').toLowerCase();
         if (msg.includes('rate') || msg.includes('limit') || msg.includes('too many')) {
-          lastErr = json.error;
           await sleep(200 * (attempt + 1));
           continue;
         }
         return null;
       }
       return (json.result as LogEntry[]) ?? null;
-    } catch (err) {
-      lastErr = err;
+    } catch {
       await sleep(200 * (attempt + 1));
     } finally {
       clearTimeout(timeout);
