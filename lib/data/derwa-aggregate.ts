@@ -314,8 +314,15 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
   const totalDerwaTvl = wrappers.reduce((s, w) => s + w.tvlUsd, 0);
   const totalInstTvl = wrappers.reduce((s, w) => s + (w.instTvlUsd ?? 0), 0);
   const totalWrapRatio = totalInstTvl > 0 ? totalDerwaTvl / totalInstTvl : 0;
+
+  // Unique holders across ALL wrapper positions — not just the top 5 per
+  // wrapper (that capped this value at 20 regardless of reality). Uses
+  // the full positions list the aggregator already has in scope.
+  const wrapperTokenIds = new Set(wrappers.map((w) => w.tokenId));
   const totalHolders = new Set(
-    wrappers.flatMap((w) => w.topHolders.map((h) => h.account)),
+    positions
+      .filter((p) => wrapperTokenIds.has(p.tokenId))
+      .map((p) => p.accountAddress.toLowerCase()),
   ).size;
 
   return {

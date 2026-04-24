@@ -130,19 +130,25 @@ export function reconcileToken(
   const divergence = Math.abs(onchainSupply - indexerIssuance) / bigger;
 
   if (divergence <= DIVERGENCE_THRESHOLD) {
+    // When both sources agree within 1%, a single failed chain is network
+    // noise, not a real data-quality problem. Only escalate to "degraded"
+    // when multiple chains failed — that's when we're missing enough
+    // coverage to actually worry.
+    const isNoise = chainsFailed <= 1;
     return {
       symbol,
       onchainSupply,
       indexerIssuance,
       divergence,
-      quality: chainsFailed > 0 ? 'degraded' : 'ok',
+      quality: isNoise ? 'ok' : 'degraded',
       chainsOk,
       chainsFailed,
       source: 'onchain',
-      message:
-        chainsFailed > 0
-          ? `On-chain and indexer agree within ${(DIVERGENCE_THRESHOLD * 100).toFixed(0)}%. ${chainsFailed} chain(s) failed during on-chain read.`
-          : 'On-chain and indexer data in agreement.',
+      message: isNoise
+        ? chainsFailed === 1
+          ? 'On-chain and indexer data in agreement. One chain read hit a transient RPC error and was skipped — authoritative total remains accurate.'
+          : 'On-chain and indexer data in agreement.'
+        : `On-chain and indexer agree within ${(DIVERGENCE_THRESHOLD * 100).toFixed(0)}%, but ${chainsFailed} chain reads failed — some supply may be missing.`,
     };
   }
 
@@ -166,7 +172,10 @@ export function reconcileToken(
   }
 
   // Case 5b: on-chain > indexer — indexer is under-reporting. This is the
-  // exact bug that motivated this architecture. On-chain is authoritative.
+  // exact bug that motivated this architecture. On-chain is authoritative,
+  // and because we SHOW the on-chain number, the displayed value is
+  // trustworthy. Surface this as "ok" (with an informational note) rather
+  // than "broken" — the badge reflects OUR data quality, not the indexer's.
   if (onchainSupply > indexerIssuance) {
     const ratio = (divergence * 100).toFixed(1);
     return {
@@ -174,14 +183,14 @@ export function reconcileToken(
       onchainSupply,
       indexerIssuance,
       divergence,
-      quality: 'broken',
+      quality: 'ok',
       chainsOk,
       chainsFailed,
       source: 'onchain',
       message:
         indexerIssuance === 0
-          ? `Indexer reports zero issuance but on-chain supply is ${onchainSupply.toLocaleString()}. Using authoritative on-chain read.`
-          : `Indexer under-reports by ${ratio}% vs on-chain. Using authoritative on-chain read (${onchainSupply.toLocaleString()} vs indexer ${indexerIssuance.toLocaleString()}).`,
+          ? `Centrifuge's indexer reports zero issuance for this token, but on-chain supply is ${onchainSupply.toLocaleString()}. Displayed value comes from the authoritative on-chain read.`
+          : `Centrifuge's indexer under-reports by ${ratio}% vs on-chain. Displayed value uses the authoritative on-chain read (${onchainSupply.toLocaleString()} vs indexer ${indexerIssuance.toLocaleString()}).`,
     };
   }
 

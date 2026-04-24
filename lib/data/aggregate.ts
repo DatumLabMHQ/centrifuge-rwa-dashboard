@@ -281,11 +281,19 @@ export function aggregateOverview(
       chains: Array.from(a.chains).sort(),
     }));
 
+  // "Active" = chain has meaningful TVL ($100+). Dust chains — where the
+  // indexer records a $1 test transfer or a leftover dev deployment — don't
+  // count as active, otherwise we'd report 9 when users only see 6 in the
+  // visible breakdown. $100 is high enough to exclude dev noise, low enough
+  // that a legit small spoke deployment still shows up.
+  const MEANINGFUL_CHAIN_TVL = 100;
+  const activeChains = byChain.filter((c) => c.tvlUsd >= MEANINGFUL_CHAIN_TVL).length;
+
   return {
     totals: {
       tvlUsd,
       activePools,
-      activeChains: byChain.length,
+      activeChains,
       netFlows30dUsd,
     },
     byChain,

@@ -71,7 +71,11 @@ export interface TokenDef {
 export const INSTITUTIONAL_TOKENS: Record<string, TokenDef> = {
   JTRSY: {
     symbol: 'JTRSY',
-    decimals: 18,
+    // Janus Henderson tokens use 6 decimals to match USDC precision —
+    // verified on-chain via decimals() on 0x8c213ee7...: returns 0x06.
+    // NOT 18 like every other token in the registry — getting this wrong
+    // silently collapses $1.5B of TVL to $0.00152 in the aggregator.
+    decimals: 6,
     deployments: {
       ethereum:  '0x8c213ee79581ff4984583c6a801e5263418c4b86',
       base:      '0x8c213ee79581ff4984583c6a801e5263418c4b86',
@@ -91,7 +95,8 @@ export const INSTITUTIONAL_TOKENS: Record<string, TokenDef> = {
   },
   JAAA: {
     symbol: 'JAAA',
-    decimals: 18,
+    // See JTRSY — Janus Henderson funds use USDC-aligned 6-decimal precision.
+    decimals: 6,
     deployments: {
       ethereum:  '0x5a0f93d040de44e78f251b03c43be9cf317dcf64',
       base:      '0x5a0F93D040De44e78F251b03c43be9CF317Dcf64',
