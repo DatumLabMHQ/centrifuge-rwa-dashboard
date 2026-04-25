@@ -23,6 +23,7 @@ import {
   type TokenInstance,
   type TokenInstancePosition,
 } from '@/lib/data/types';
+import { preferredSupply } from '@/lib/data/reconcile';
 
 /** Convert a BigInt-as-string to Number safely (loses precision over ~9e15). */
 function bn(value: string | null | undefined, decimals: number): number {
@@ -145,12 +146,26 @@ export function aggregateOverview(
   pools: Pool[],
   transactions: InvestorTransaction[],
   metadataMap?: ClassifierMap,
-  onchainSupplies?: Record<string, { totalSupply: number; totalTvlUsd: number; perChain: Array<{ chain: string; chainId: number; supply: number }> }>,
+  onchainSupplies?: Record<string, { totalSupply: number; totalTvlUsd: number; chainsFailed?: number; perChain: Array<{ chain: string; chainId: number; supply: number }> }>,
 ): OverviewData {
-  // Helper: resolve tvl for a token, preferring on-chain over indexer.
+  // Helper: resolve tvl for a token via the central preferredSupply rule.
+  // We default to indexer when the two sources agree within 10% (matches
+  // Centrifuge's "circulating supply" convention) and fall back to on-chain
+  // only when the indexer is broken (deSPXA / deCRDX-style 0 case).
   const tokenTvl = (t: Token): number => {
     const onchain = onchainSupplies?.[t.symbol];
-    if (onchain && onchain.totalTvlUsd > 0) return onchain.totalTvlUsd;
+    const indexerTokenIssuance = bn(t.totalIssuance, t.decimals);
+    const nav = priceUsd(t.tokenPrice);
+    if (onchain && nav > 0) {
+      const { supply } = preferredSupply(
+        onchain.totalSupply,
+        indexerTokenIssuance,
+        onchain.chainsFailed ?? 0,
+      );
+      if (supply > 0) return supply * nav;
+    }
+    // No registry / on-chain reader for this token → fall back to the
+    // pre-existing per-instance sum (indexer-only).
     return tokenTvlUsd(t);
   };
   const instanceTvl = (inst: TokenInstance, t: Token): number => {
@@ -311,7 +326,7 @@ export function aggregatePools(
   pools: Pool[],
   transactions: InvestorTransaction[],
   metadataMap?: ClassifierMap,
-  onchainSupplies?: Record<string, { totalSupply: number; totalTvlUsd: number; perChain: Array<{ chain: string; supply: number }> }>,
+  onchainSupplies?: Record<string, { totalSupply: number; totalTvlUsd: number; chainsFailed?: number; perChain: Array<{ chain: string; supply: number }> }>,
 ): PoolsData {
   const tokenInfo = buildTokenInfoMap(pools);
   const flows = flowsByTokenId(transactions, tokenInfo);
@@ -348,17 +363,33 @@ export function aggregatePools(
       .filter((c) => c.supply > 0)
       .sort((a, b) => b.tvlUsd - a.tvlUsd);
 
-    // Use on-chain totals when available — this covers tokens whose
-    // tokenInstances array is empty or stale in the indexer.
-    // If the on-chain rollup is zero (e.g. all chains timed out) and the
-    // chain breakdown has data (indexer fallback per chain), use the chain
-    // sum instead. `??` only catches null, not zero.
+    // Pick the supply via the central preferredSupply rule — defers to
+    // the indexer's Token.totalIssuance when sources agree within 10%
+    // (matching Centrifuge's "circulating supply" convention) and falls
+    // back to authoritative on-chain when the indexer is broken.
+    //
+    // Per-chain breakdown above keeps using on-chain data because the
+    // indexer's per-chain values are unreliable for the same tokens (they
+    // hold whole sub-fractions of supply that don't exist as transactions
+    // — the same upstream bug). Sum-of-chains may differ from the headline
+    // by the issuer-held amount; documented in the methodology page.
+    const indexerTokenIssuance = bn(token.totalIssuance, token.decimals);
     const chainSumTvl = chainBreakdown.reduce((s, c) => s + c.tvlUsd, 0);
     const chainSumSupply = chainBreakdown.reduce((s, c) => s + c.supply, 0);
+    const onchainSupply = onchain?.totalSupply ?? 0;
+    const chainsFailed = onchain?.chainsFailed ?? 0;
+    const { supply: chosenSupply } = preferredSupply(
+      onchainSupply,
+      indexerTokenIssuance,
+      chainsFailed,
+    );
+    // Final guards: if the chosen value is zero but we have positive
+    // chain-sum data (indexer fallback per chain), use that — handles
+    // the all-chains-failed-but-indexer-also-zero edge that would
+    // otherwise leave the row at $0.
+    const totalSupply = chosenSupply > 0 ? chosenSupply : chainSumSupply;
     const tvlUsd =
-      onchain && onchain.totalTvlUsd > 0 ? onchain.totalTvlUsd : chainSumTvl;
-    const totalSupply =
-      onchain && onchain.totalSupply > 0 ? onchain.totalSupply : chainSumSupply;
+      chosenSupply > 0 ? chosenSupply * nav : chainSumTvl;
     const flowAcc = flows.get(token.id) ?? { netUsd: 0, count: 0 };
 
     return [

@@ -29,6 +29,7 @@ import type { DefiLlamaPool } from '@/lib/data/defillama-yields';
 import type { GeckoPoolStats } from '@/lib/data/geckoterminal';
 import type { EulerMarketStats } from '@/lib/data/euler';
 import type { TokenSupplySnapshot } from '@/lib/data/onchain/supply';
+import { preferredSupply } from '@/lib/data/reconcile';
 
 /* ─── BigInt helpers (copied from aggregate.ts so derwa is self-contained) ── */
 
@@ -154,38 +155,51 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
       .filter((c) => c.supply > 0)
       .sort((a, b) => b.tvlUsd - a.tvlUsd);
 
-    // Prefer the on-chain rollup (sum across all registered deployments)
-    // over the per-chain sum from the indexer, since the indexer can miss
-    // deployments entirely (not just report them as 0).
+    // Pick the supply via the central preferredSupply rule — defers to the
+    // indexer's Token.totalIssuance when sources agree within 10% (matches
+    // Centrifuge's "circulating supply" convention) and falls back to
+    // authoritative on-chain when the indexer is broken.
     //
-    // BUT: if the on-chain rollup came back zero AND the per-chain sum has
-    // data (indexer fallback already applied by the merge above), use the
-    // chain sum instead. This matters for single-chain tokens like deCRDX
-    // where a single RPC failure would otherwise zero out the wrapper.
+    // Per-chain breakdown above stays on-chain because the indexer's
+    // per-chain values are unreliable for the same tokens.
     const chainSumTvl = chains.reduce((s, c) => s + c.tvlUsd, 0);
     const chainSumSupply = chains.reduce((s, c) => s + c.supply, 0);
-    const tvlUsd =
-      onchain && onchain.totalTvlUsd > 0 ? onchain.totalTvlUsd : chainSumTvl;
-    const totalSupply =
-      onchain && onchain.totalSupply > 0 ? onchain.totalSupply : chainSumSupply;
+    const indexerTokenIssuance = bn(token.totalIssuance, token.decimals);
+    const onchainSupply = onchain?.totalSupply ?? 0;
+    const chainsFailed = onchain?.chainsFailed ?? 0;
+    const { supply: chosenSupply } = preferredSupply(
+      onchainSupply,
+      indexerTokenIssuance,
+      chainsFailed,
+    );
+    const totalSupply = chosenSupply > 0 ? chosenSupply : chainSumSupply;
+    const tvlUsd = chosenSupply > 0 ? chosenSupply * navUsd : chainSumTvl;
 
-    // Wrap ratio vs the institutional pool — use on-chain inst TVL when
-    // available, falling back to the indexer.
+    // Wrap ratio vs the institutional pool. The inst TVL also routes
+    // through preferredSupply so the JTRSY/JAAA wrap ratios match the
+    // numerator Centrifuge uses on their dashboard. Sanity guard remains:
+    // if the resulting instTvl is somehow smaller than the wrapper it
+    // backs, that's a data problem and we render no wrap ratio.
     const instOnchain = ctx.instSymbol ? input.onchainSupplies?.[ctx.instSymbol] : undefined;
     const inst = poolBySymbol.get(ctx.instSymbol);
     const instNav = inst ? priceUsd(inst.token.tokenPrice) : 0;
-    // Only trust on-chain inst TVL when supply is positive (zero means
-    // all chains failed) AND the result is at least as large as the
-    // wrapper itself — every wrapper is 1:1 backed by an inst token, so
-    // instTvl < wrapperTvl is definitionally a data-quality problem.
     let instTvlUsd: number | null = null;
-    if (instOnchain && instOnchain.totalSupply > 0 && instNav > 0) {
-      const candidate = instOnchain.totalSupply * instNav;
-      if (candidate >= tvlUsd * 0.95) instTvlUsd = candidate;
+    if (inst && instNav > 0) {
+      const indexerInstIssuance = bn(inst.token.totalIssuance, inst.token.decimals);
+      const { supply: chosenInstSupply } = preferredSupply(
+        instOnchain?.totalSupply ?? 0,
+        indexerInstIssuance,
+        instOnchain?.chainsFailed ?? 0,
+      );
+      if (chosenInstSupply > 0) {
+        const candidate = chosenInstSupply * instNav;
+        if (candidate >= tvlUsd * 0.95) instTvlUsd = candidate;
+      }
     }
+    // Last-resort fallback: per-instance summed indexer TVL. Same
+    // structural guard.
     if (instTvlUsd == null && inst) {
       const candidate = tokenTvlUsd(inst.token);
-      // Same guard: indexer sometimes reports tiny values for broken tokens.
       if (candidate >= tvlUsd * 0.95) instTvlUsd = candidate;
     }
     const wrapRatio =

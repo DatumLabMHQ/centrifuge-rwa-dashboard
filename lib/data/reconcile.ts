@@ -14,8 +14,81 @@
 import type { TokenSupplySnapshot } from './onchain/supply';
 import type { Pool } from './types';
 
-/** Relative diff above which we consider the two tiers inconsistent. */
+/** Relative diff above which we flag the two tiers as actually disagreeing
+ *  in the UI — anything within this band is "agreement," even if values
+ *  aren't byte-identical. */
 export const DIVERGENCE_THRESHOLD = 0.01; // 1%
+
+/**
+ * When on-chain is HIGHER than indexer by less than this threshold, we
+ * defer to the indexer because the gap is almost certainly issuer-held
+ * supply / pre-mint that hasn't been allocated to investors yet — the
+ * meaningful "circulating" number is what Centrifuge's official dashboard
+ * shows. Above this threshold we treat the indexer as broken and prefer
+ * the on-chain authoritative value (the deSPXA / deCRDX-style cases where
+ * the indexer reports 0 or near-0).
+ *
+ * Calibrated against the JTRSY case: ~6% gap = issuer treasury exclusion.
+ * Set to 10% for headroom.
+ */
+export const INDEXER_PREFERENCE_THRESHOLD = 0.10; // 10%
+
+/**
+ * Decide which value to use for TVL: on-chain `totalSupply()` or the
+ * indexer's `Token.totalIssuance`. Single source of truth — both the
+ * reconciliation classifier (this file) AND the page-level aggregators
+ * route through this function so the displayed number matches the
+ * data-quality badge.
+ *
+ * Returns the chosen supply and which source it came from.
+ */
+export function preferredSupply(
+  onchainSupply: number,
+  indexerIssuance: number,
+  chainsFailed: number,
+): { supply: number; source: 'onchain' | 'indexer' | 'none' } {
+  const bothZero = onchainSupply === 0 && indexerIssuance === 0;
+  if (bothZero) return { supply: 0, source: 'none' };
+
+  // Indexer reports 0 but on-chain has supply → indexer is broken (the
+  // deSPXA / deCRDX bug). Use authoritative on-chain.
+  if (indexerIssuance === 0 && onchainSupply > 0) {
+    return { supply: onchainSupply, source: 'onchain' };
+  }
+
+  // On-chain returned 0 (e.g. all chain RPCs failed or token isn't
+  // actually deployed) but indexer has data → use indexer fallback.
+  if (onchainSupply === 0 && indexerIssuance > 0) {
+    return { supply: indexerIssuance, source: 'indexer' };
+  }
+
+  // Both positive. Use the indexer value when the two sources are within
+  // the preference threshold — Centrifuge's indexer counts "supply
+  // allocated to investors," excluding issuer-held / pre-mint balances.
+  // That's the meaningful "circulating TVL" number their official
+  // dashboard publishes; we want to match it where possible.
+  const bigger = Math.max(onchainSupply, indexerIssuance);
+  const divergence = Math.abs(onchainSupply - indexerIssuance) / bigger;
+  if (divergence <= INDEXER_PREFERENCE_THRESHOLD) {
+    return { supply: indexerIssuance, source: 'indexer' };
+  }
+
+  // Significant divergence. If on-chain > indexer the indexer is broken
+  // (full deSPXA-style 0 case, or under-counts catastrophically). Use
+  // authoritative on-chain.
+  if (onchainSupply > indexerIssuance) {
+    // Note: `chainsFailed` could mean our on-chain read is incomplete,
+    // but if we're already higher than the indexer the read clearly
+    // captured most of supply — failures here would only widen the gap.
+    void chainsFailed;
+    return { supply: onchainSupply, source: 'onchain' };
+  }
+
+  // On-chain < indexer with significant gap — rare. Likely an incomplete
+  // on-chain read (chain failures pushed our number lower than reality).
+  // Fall back to indexer.
+  return { supply: indexerIssuance, source: 'indexer' };
+}
 
 export type DataQualityLevel = 'ok' | 'degraded' | 'broken';
 
@@ -125,15 +198,43 @@ export function reconcileToken(
     };
   }
 
-  // Case 4: both positive — compute divergence.
+  // Case 4+: both positive. Route through the central preferredSupply()
+  // function and synthesise a quality + message based on which source
+  // it picked and how the two values compare.
   const bigger = Math.max(onchainSupply, indexerIssuance);
   const divergence = Math.abs(onchainSupply - indexerIssuance) / bigger;
+  const { source } = preferredSupply(onchainSupply, indexerIssuance, chainsFailed);
 
-  if (divergence <= DIVERGENCE_THRESHOLD) {
-    // When both sources agree within 1%, a single failed chain is network
-    // noise, not a real data-quality problem. Only escalate to "degraded"
-    // when multiple chains failed — that's when we're missing enough
-    // coverage to actually worry.
+  // Match Centrifuge's circulating-supply convention: when on-chain is
+  // higher than indexer by less than INDEXER_PREFERENCE_THRESHOLD, the
+  // gap is treasury / pre-mint. The data is fine; we just deferred to
+  // the indexer because that's what their dashboard shows.
+  if (
+    source === 'indexer' &&
+    onchainSupply > indexerIssuance &&
+    divergence <= INDEXER_PREFERENCE_THRESHOLD
+  ) {
+    const ratio = (divergence * 100).toFixed(2);
+    return {
+      symbol,
+      onchainSupply,
+      indexerIssuance,
+      divergence,
+      quality: 'ok',
+      chainsOk,
+      chainsFailed,
+      source: 'indexer',
+      message:
+        divergence < 0.001
+          ? 'On-chain and indexer match exactly.'
+          : `On-chain has ${ratio}% more supply than indexer (${(onchainSupply - indexerIssuance).toLocaleString()} shares of treasury / pre-mint). Displayed value uses the indexer's "circulating supply" — matching Centrifuge's official dashboard.`,
+    };
+  }
+
+  // Same as above but on-chain < indexer (rare edge — usually means a
+  // partial on-chain read). Within threshold, agreement, use indexer.
+  if (source === 'indexer' && divergence <= INDEXER_PREFERENCE_THRESHOLD) {
+    const ratio = (divergence * 100).toFixed(2);
     const isNoise = chainsFailed <= 1;
     return {
       symbol,
@@ -143,20 +244,15 @@ export function reconcileToken(
       quality: isNoise ? 'ok' : 'degraded',
       chainsOk,
       chainsFailed,
-      source: 'onchain',
+      source: 'indexer',
       message: isNoise
-        ? chainsFailed === 1
-          ? 'On-chain and indexer data in agreement. One chain read hit a transient RPC error and was skipped — authoritative total remains accurate.'
-          : 'On-chain and indexer data in agreement.'
-        : `On-chain and indexer agree within ${(DIVERGENCE_THRESHOLD * 100).toFixed(0)}%, but ${chainsFailed} chain reads failed — some supply may be missing.`,
+        ? `On-chain and indexer data in agreement (${ratio}% gap${chainsFailed === 1 ? ', one chain read skipped' : ''}). Using indexer.`
+        : `On-chain and indexer agree within threshold but ${chainsFailed} chain reads failed — some supply may be missing.`,
     };
   }
 
-  // Case 5a: significant divergence WITH chain failures and on-chain < indexer.
-  // This is the network-noise case — our on-chain read is incomplete, so the
-  // indexer number is actually more reliable. Downgrade to 'degraded' and
-  // fall back to the indexer. Don't cry "broken" when we're the one blinking.
-  if (onchainSupply < indexerIssuance && chainsFailed > 0) {
+  // Significant gap with on-chain partial — fall back to indexer.
+  if (source === 'indexer' && onchainSupply < indexerIssuance) {
     const ratio = (divergence * 100).toFixed(1);
     return {
       symbol,
@@ -171,12 +267,9 @@ export function reconcileToken(
     };
   }
 
-  // Case 5b: on-chain > indexer — indexer is under-reporting. This is the
-  // exact bug that motivated this architecture. On-chain is authoritative,
-  // and because we SHOW the on-chain number, the displayed value is
-  // trustworthy. Surface this as "ok" (with an informational note) rather
-  // than "broken" — the badge reflects OUR data quality, not the indexer's.
-  if (onchainSupply > indexerIssuance) {
+  // On-chain >> indexer beyond threshold → indexer is broken (the
+  // deSPXA / deCRDX scenario). Use authoritative on-chain.
+  if (source === 'onchain' && onchainSupply > indexerIssuance) {
     const ratio = (divergence * 100).toFixed(1);
     return {
       symbol,
@@ -189,13 +282,14 @@ export function reconcileToken(
       source: 'onchain',
       message:
         indexerIssuance === 0
-          ? `Centrifuge's indexer reports zero issuance for this token, but on-chain supply is ${onchainSupply.toLocaleString()}. Displayed value comes from the authoritative on-chain read.`
-          : `Centrifuge's indexer under-reports by ${ratio}% vs on-chain. Displayed value uses the authoritative on-chain read (${onchainSupply.toLocaleString()} vs indexer ${indexerIssuance.toLocaleString()}).`,
+          ? `Centrifuge's indexer reports zero issuance for this token, but on-chain supply is ${onchainSupply.toLocaleString()}. Displayed value uses the authoritative on-chain read.`
+          : `Centrifuge's indexer under-reports by ${ratio}% vs on-chain (beyond the ${(INDEXER_PREFERENCE_THRESHOLD * 100).toFixed(0)}% treasury-tolerance band — likely an indexer gap). Displayed value uses the authoritative on-chain read.`,
     };
   }
 
-  // Case 5c: on-chain < indexer AND no chain failures — we read cleanly, the
-  // indexer is over-reporting. Rare; could indicate stale indexer state.
+  // Catch-all: we got here with `source === 'onchain'` but on-chain isn't
+  // higher than indexer. Means clean on-chain read, indexer over-reports.
+  // Surface as broken — uncommon and worth a closer look.
   const ratio = (divergence * 100).toFixed(1);
   return {
     symbol,

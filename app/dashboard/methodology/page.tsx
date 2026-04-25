@@ -222,11 +222,20 @@ function ArchitectureTiers() {
             <>
               For metrics where we have both Tier 1 and Tier 2 sources (token
               supply, DEX volume), we compute both and compare. The result is
-              a per-metric data-quality entry: <em>ok</em> when sources agree
-              within 1%, <em>degraded</em> when chain failures leave the
-              comparison incomplete, <em>broken</em> only when we can&apos;t
-              produce a trustworthy value at all. The badges on every page
-              header reflect this state.
+              a per-metric data-quality entry that the page-level aggregators
+              also consult to choose which source to display:
+              <br />
+              <br />
+              <strong>For token supply specifically</strong>, the rule prefers
+              the indexer&apos;s <code>Token.totalIssuance</code> when the two
+              sources agree within 10% — that band catches the cases where
+              on-chain has more supply than indexer because the issuer holds
+              treasury / pre-mint shares that aren&apos;t allocated to
+              investors. Centrifuge&apos;s official dashboard publishes the
+              &ldquo;allocated to investors&rdquo; number, so we match it. Beyond 10%
+              divergence we fall back to authoritative on-chain (the deSPXA /
+              deCRDX-style cases where indexer reports near-zero against
+              billions on-chain).
             </>
           }
         />
@@ -285,15 +294,20 @@ function PerMetric() {
           where="Overview"
           formula={
             <>
-              <code>Σ(pools) Σ(tokenInstances) issuance × price</code> with the
-              authoritative on-chain <code>totalSupply()</code> preferred per
-              chain when available, indexer&apos;s{' '}
-              <code>tokenInstance.totalIssuance</code> as fallback.
+              <code>Σ(pools) supply × NAV</code>, where{' '}
+              <code>supply</code> is chosen per token via{' '}
+              <code>preferredSupply()</code>: indexer&apos;s{' '}
+              <code>Token.totalIssuance</code> when sources agree within 10%,
+              authoritative on-chain <code>totalSupply()</code> when the
+              indexer is broken (deSPXA-style 0 case).
             </>
           }
           notes={[
+            'The 10% preference threshold matches Centrifuge\u2019s "circulating supply" convention. Their indexer excludes issuer-held / pre-mint balances from totalIssuance; the chain holds them via totalSupply but they\u2019re not allocated to investors. Deferring to indexer in this band keeps our headline numbers identical to centrifuge.io\u2019s.',
+            'When the gap exceeds 10% in either direction we treat the indexer as broken and use authoritative on-chain. This catches deSPXA, deCRDX, SPXA, ArkOdin where indexer reports near-zero issuance against billions of on-chain supply.',
             'Token decimals are read from the indexer (or hardcoded in lib/data/onchain/registry.ts where we manage on-chain reads). JTRSY and JAAA use 6 decimals; everything else uses 18.',
             'NAV is always sourced from the Centrifuge indexer (tokenPrice, scaled by 1e18) — there is no on-chain "NAV" reading because NAV is published off-chain by the asset manager.',
+            'Per-chain breakdown stays on-chain authoritative: chainSum may differ from the headline by the issuer-held amount excluded from indexer totalIssuance.',
           ]}
         />
         <Metric
