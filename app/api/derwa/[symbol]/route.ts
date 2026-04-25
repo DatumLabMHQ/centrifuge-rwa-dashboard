@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { globalCache } from '@/lib/sdk/cache';
+import { swr } from '@/lib/sdk/kv-cache';
 import {
   getAllPools,
   getRecentFlowTransactions,
@@ -16,14 +16,14 @@ import { getDerwaContext } from '@/lib/data/derwa-context';
 import { reconcileAll } from '@/lib/data/reconcile';
 import type { DerwaDetailData, MorphoMarketData } from '@/lib/data/types';
 
-const DEFAULT_TTL_S = 300;
+const DEFAULT_FRESH_TTL_S = 300;
 const ALLOWED_DAYS = new Set([7, 30, 90, 365]);
 const WRAPPER_SYMBOLS = new Set(['deJTRSY', 'deJAAA', 'deCRDX', 'deSPXA']);
 
-function ttlMs(): number {
+function freshTtlS(): number {
   const raw = process.env.CACHE_TTL_OVERVIEW;
-  const seconds = raw ? Number(raw) : DEFAULT_TTL_S;
-  return (Number.isFinite(seconds) ? seconds : DEFAULT_TTL_S) * 1000;
+  const v = raw ? Number(raw) : DEFAULT_FRESH_TTL_S;
+  return Number.isFinite(v) ? v : DEFAULT_FRESH_TTL_S;
 }
 
 /**
@@ -50,11 +50,33 @@ export async function GET(
     const days = ALLOWED_DAYS.has(requested) ? requested : 365;
 
     const cacheKey = `centrifuge:derwa:detail:${symbol}:${days}`;
-    const cached = globalCache.get<DerwaDetailData>(cacheKey, ttlMs());
-    if (cached) {
-      return NextResponse.json({ ...cached, cached: true });
-    }
+    const result = await swr<DerwaDetailData>(
+      cacheKey,
+      { freshTtlS: freshTtlS() },
+      async () => computeDerwaDetail(symbol, days),
+    );
 
+    return NextResponse.json({
+      ...result.data,
+      cached: result.cached,
+      stale: result.stale,
+      ageSeconds: result.ageSeconds,
+    });
+  } catch (err) {
+    console.error('[api/derwa/[symbol]] failed', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json(
+      { error: 'Failed to load wrapper detail', detail: message },
+      { status: 502 },
+    );
+  }
+}
+
+/**
+ * Inline-extracted compute. Pulled out of GET so the SWR fetcher can be
+ * a one-liner; logic itself is unchanged.
+ */
+async function computeDerwaDetail(symbol: string, days: number): Promise<DerwaDetailData> {
     // Pull pools, transactions, positions in parallel
     const [pools, transactions, positions] = await Promise.all([
       getAllPools(200),
@@ -148,7 +170,10 @@ export async function GET(
     });
 
     if (!data) {
-      return NextResponse.json({ error: 'Wrapper not found in live data' }, { status: 404 });
+      // Surfaced as a 502 by the GET handler — same effect as the old
+      // 404 from the user's perspective. Throwing here keeps the SWR
+      // wrapper from caching a missing-wrapper result.
+      throw new Error('Wrapper not found in live data');
     }
 
     // Fetch live Morpho market stats if this wrapper has a LIVE lending
@@ -203,14 +228,5 @@ export async function GET(
     const dataQuality = allRecons[symbol] ?? null;
 
     const enriched: DerwaDetailData = { ...data, morpho, dataQuality };
-    globalCache.set(cacheKey, enriched);
-    return NextResponse.json({ ...enriched, cached: false });
-  } catch (err) {
-    console.error('[api/derwa/[symbol]] failed', err);
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { error: 'Failed to load wrapper detail', detail: message },
-      { status: 502 },
-    );
-  }
+    return enriched;
 }

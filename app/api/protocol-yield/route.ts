@@ -15,7 +15,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { globalCache } from '@/lib/sdk/cache';
+import { swr } from '@/lib/sdk/kv-cache';
 import {
   getAllPools,
   getRecentFlowTransactions,
@@ -30,13 +30,13 @@ import {
 import { getCentrifugeDailyRevenue, type DefiLlamaRevenueData } from '@/lib/data/defillama-fees';
 
 const CACHE_KEY = 'centrifuge:protocol-yield';
-const DEFAULT_TTL_S = 3600; // 1 hour
+const DEFAULT_FRESH_TTL_S = 3600; // 1 hour
 const ALLOWED_DAYS = new Set([30, 90, 180, 365]);
 
-function ttlMs(): number {
+function freshTtlS(): number {
   const raw = process.env.CACHE_TTL_PROTOCOL_YIELD;
-  const seconds = raw ? Number(raw) : DEFAULT_TTL_S;
-  return (Number.isFinite(seconds) ? seconds : DEFAULT_TTL_S) * 1000;
+  const v = raw ? Number(raw) : DEFAULT_FRESH_TTL_S;
+  return Number.isFinite(v) ? v : DEFAULT_FRESH_TTL_S;
 }
 
 interface ResponsePayload {
@@ -51,59 +51,51 @@ export async function GET(request: Request) {
     const days = ALLOWED_DAYS.has(requested) ? requested : 90;
 
     const cacheKey = `${CACHE_KEY}:${days}`;
-    const cached = globalCache.get<ResponsePayload>(cacheKey, ttlMs());
-    if (cached) {
-      return NextResponse.json({ ...cached, cached: true });
-    }
+    const result = await swr<ResponsePayload>(
+      cacheKey,
+      { freshTtlS: freshTtlS() },
+      async () => {
+        const [pools, transactions] = await Promise.all([
+          getAllPools(200),
+          getRecentFlowTransactions(1000),
+        ]);
+        const primary = pools
+          .map((pool) => {
+            const token = pickPrimaryToken(pool);
+            return token ? { tokenId: token.id, decimals: token.decimals } : null;
+          })
+          .filter((x): x is { tokenId: string; decimals: number } => !!x);
 
-    const [pools, transactions] = await Promise.all([
-      getAllPools(200),
-      // Indexer caps out at 1000 rows per query. For a 90-day window of
-      // typical Centrifuge volume that's enough — current daily averages
-      // run well under 30 transactions.
-      getRecentFlowTransactions(1000),
-    ]);
+        const snapLimit = Math.max(120, days + 30);
+        const snapshotBundles: TokenSnapshotBundle[] = await Promise.all(
+          primary.map(async ({ tokenId, decimals }) => {
+            try {
+              const snapshots = await getTokenSnapshots(tokenId, snapLimit);
+              return { tokenId, decimals, snapshots };
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(`[api/protocol-yield] snapshots failed for ${tokenId}: ${msg}`);
+              return { tokenId, decimals, snapshots: [] };
+            }
+          }),
+        );
 
-    // Pick one primary token per pool. We need its decimals + indexer ID
-    // to fetch historical snapshots.
-    const primary = pools
-      .map((pool) => {
-        const token = pickPrimaryToken(pool);
-        return token ? { tokenId: token.id, decimals: token.decimals } : null;
-      })
-      .filter((x): x is { tokenId: string; decimals: number } => !!x);
-
-    // Fetch snapshots in parallel. Limit how many days we ask for —
-    // the indexer caps out at 1000 records per query, but we never need
-    // more than `days + buffer` because we bucket per-day at close.
-    // Per-token errors are swallowed so one bad token can't fail the whole
-    // route — we log them and continue with the rest.
-    const snapLimit = Math.max(120, days + 30);
-    const snapshotBundles: TokenSnapshotBundle[] = await Promise.all(
-      primary.map(async ({ tokenId, decimals }) => {
-        try {
-          const snapshots = await getTokenSnapshots(tokenId, snapLimit);
-          return { tokenId, decimals, snapshots };
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`[api/protocol-yield] snapshots failed for ${tokenId}: ${msg}`);
-          return { tokenId, decimals, snapshots: [] };
-        }
-      }),
+        const yieldData = computeProtocolYield({
+          snapshots: snapshotBundles,
+          transactions,
+          windowDays: days,
+        });
+        const revenue = await getCentrifugeDailyRevenue();
+        return { yield: yieldData, revenue };
+      },
     );
 
-    const yieldData = computeProtocolYield({
-      snapshots: snapshotBundles,
-      transactions,
-      windowDays: days,
+    return NextResponse.json({
+      ...result.data,
+      cached: result.cached,
+      stale: result.stale,
+      ageSeconds: result.ageSeconds,
     });
-
-    // DefiLlama is best-effort. If it 503s we still return the yield.
-    const revenue = await getCentrifugeDailyRevenue();
-
-    const payload: ResponsePayload = { yield: yieldData, revenue };
-    globalCache.set(cacheKey, payload);
-    return NextResponse.json({ ...payload, cached: false });
   } catch (err) {
     console.error('[api/protocol-yield] failed', err);
     const message = err instanceof Error ? err.message : 'Unknown error';

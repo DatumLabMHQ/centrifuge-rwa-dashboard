@@ -765,12 +765,41 @@ function NotTracked() {
 function Cadence() {
   return (
     <TuiPanel title="UPDATE CADENCE">
+      <div className="prose-style space-y-3" style={{ marginBottom: 14 }}>
+        <p>
+          All API routes use <strong>stale-while-revalidate (SWR)</strong>{' '}
+          backed by Vercel KV (Redis). When you load a page:
+        </p>
+        <ol style={{ paddingLeft: 18, lineHeight: 1.7, fontSize: 12 }}>
+          <li>
+            <strong>Cache hit + fresh</strong> (within the TTL below) → response is
+            served from KV instantly
+          </li>
+          <li>
+            <strong>Cache hit + stale</strong> (within 4× TTL) → stale response is
+            served instantly AND a background refresh fires; next visitor
+            gets the fresh result
+          </li>
+          <li>
+            <strong>Cache miss / fully expired</strong> → fresh fetch, written to
+            KV, returned. This is the only path that&apos;s slow, and only happens
+            after a long idle window or a fresh deploy
+          </li>
+        </ol>
+        <p style={{ fontSize: 12 }}>
+          Net result: users almost never wait for a chart to load. The
+          slow on-chain Swap event scan (~130 RPC calls) runs in the
+          background out of view; the previous response is rendered
+          immediately.
+        </p>
+      </div>
       <div className="overflow-x-auto">
         <table className="data-table">
           <thead>
             <tr>
               <th>Endpoint</th>
-              <th>Cache TTL</th>
+              <th>Fresh TTL</th>
+              <th>Stale TTL (background refresh)</th>
               <th>Why</th>
             </tr>
           </thead>
@@ -778,27 +807,32 @@ function Cadence() {
             <tr>
               <td><code>/api/overview</code></td>
               <td>5 min</td>
+              <td>20 min</td>
               <td>Most-trafficked page; fresh enough for institutional analytics, slow enough to absorb traffic bursts</td>
             </tr>
             <tr>
               <td><code>/api/pools</code>, <code>/api/derwa</code></td>
               <td>5 min</td>
+              <td>20 min</td>
               <td>Same as overview</td>
             </tr>
             <tr>
               <td><code>/api/derwa/[symbol]</code></td>
               <td>5 min</td>
+              <td>20 min</td>
               <td>Detail pages — same cadence as their list views</td>
             </tr>
             <tr>
               <td><code>/api/protocol-yield</code></td>
               <td>1 hour</td>
+              <td>1 hour (capped)</td>
               <td>Heavy compute (one tokenSnapshots call per pool); yield is a slow-moving figure</td>
             </tr>
             <tr>
               <td><code>/api/derwa/[symbol]/swaps</code></td>
-              <td>1 hour</td>
-              <td>~130 chunked eth_getLogs calls on cold cache; daily volume is fine at hourly resolution</td>
+              <td>30 min</td>
+              <td>4 hours</td>
+              <td>~130 chunked eth_getLogs calls on cold cache; we keep stale data usable longer because the cold path is the most expensive</td>
             </tr>
             <tr>
               <td><code>/api/tvl-history</code></td>

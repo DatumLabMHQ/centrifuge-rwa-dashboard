@@ -1,28 +1,30 @@
 import { NextResponse } from 'next/server';
-import { globalCache } from '@/lib/sdk/cache';
+import { swr } from '@/lib/sdk/kv-cache';
 import { getCentrifugeTvlHistory } from '@/lib/data/defillama';
 import type { TvlHistoryData } from '@/lib/data/types';
 
 const CACHE_KEY = 'centrifuge:tvl-history';
-const DEFAULT_TTL_S = 3600;
+const DEFAULT_FRESH_TTL_S = 3600;
 
-function ttlMs(): number {
+function freshTtlS(): number {
   const raw = process.env.CACHE_TTL_TVL_HISTORY;
-  const seconds = raw ? Number(raw) : DEFAULT_TTL_S;
-  return (Number.isFinite(seconds) ? seconds : DEFAULT_TTL_S) * 1000;
+  const v = raw ? Number(raw) : DEFAULT_FRESH_TTL_S;
+  return Number.isFinite(v) ? v : DEFAULT_FRESH_TTL_S;
 }
 
 export async function GET() {
   try {
-    const cached = globalCache.get<TvlHistoryData>(CACHE_KEY, ttlMs());
-    if (cached) {
-      return NextResponse.json({ ...cached, cached: true });
-    }
-
-    const data = await getCentrifugeTvlHistory();
-    globalCache.set(CACHE_KEY, data);
-
-    return NextResponse.json({ ...data, cached: false });
+    const result = await swr<TvlHistoryData>(
+      CACHE_KEY,
+      { freshTtlS: freshTtlS() },
+      async () => getCentrifugeTvlHistory(),
+    );
+    return NextResponse.json({
+      ...result.data,
+      cached: result.cached,
+      stale: result.stale,
+      ageSeconds: result.ageSeconds,
+    });
   } catch (err) {
     console.error('[api/tvl-history] failed', err);
     const message = err instanceof Error ? err.message : 'Unknown error';

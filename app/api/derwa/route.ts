@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { globalCache } from '@/lib/sdk/cache';
+import { swr } from '@/lib/sdk/kv-cache';
 import {
   getAllPools,
   getRecentFlowTransactions,
@@ -15,14 +15,14 @@ import { getDerwaContext } from '@/lib/data/derwa-context';
 import { reconcileAll, summarizeQuality } from '@/lib/data/reconcile';
 import type { DerwaData } from '@/lib/data/types';
 
-const DEFAULT_TTL_S = 300;
+const DEFAULT_FRESH_TTL_S = 300;
 const ALLOWED_DAYS = new Set([7, 30, 90, 365]);
 const WRAPPER_SYMBOLS = ['deJTRSY', 'deJAAA', 'deCRDX', 'deSPXA'];
 
-function ttlMs(): number {
+function freshTtlS(): number {
   const raw = process.env.CACHE_TTL_OVERVIEW;
-  const seconds = raw ? Number(raw) : DEFAULT_TTL_S;
-  return (Number.isFinite(seconds) ? seconds : DEFAULT_TTL_S) * 1000;
+  const v = raw ? Number(raw) : DEFAULT_FRESH_TTL_S;
+  return Number.isFinite(v) ? v : DEFAULT_FRESH_TTL_S;
 }
 
 export async function GET(request: Request) {
@@ -32,11 +32,35 @@ export async function GET(request: Request) {
     const days = ALLOWED_DAYS.has(requested) ? requested : 365;
 
     const cacheKey = `centrifuge:derwa:${days}`;
-    const cached = globalCache.get<DerwaData>(cacheKey, ttlMs());
-    if (cached) {
-      return NextResponse.json({ ...cached, cached: true });
-    }
+    const result = await swr<DerwaData>(
+      cacheKey,
+      { freshTtlS: freshTtlS() },
+      async () => {
+        return await computeDerwa(days);
+      },
+    );
 
+    return NextResponse.json({
+      ...result.data,
+      cached: result.cached,
+      stale: result.stale,
+      ageSeconds: result.ageSeconds,
+    });
+  } catch (err) {
+    console.error('[api/derwa] failed', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json(
+      { error: 'Failed to load deRWA data', detail: message },
+      { status: 502 },
+    );
+  }
+}
+
+/**
+ * Inline-extracted compute. Pulled out of GET so the SWR fetcher can be
+ * a one-liner; logic itself is unchanged.
+ */
+async function computeDerwa(days: number): Promise<DerwaData> {
     const [pools, transactions, positions] = await Promise.all([
       getAllPools(200),
       getRecentFlowTransactions(1000),
@@ -131,19 +155,8 @@ export async function GET(request: Request) {
 
     const tokens = reconcileAll({ pools, onchainSupplies });
     const summary = summarizeQuality(tokens);
-    const data: DerwaData = {
+    return {
       ...base,
       dataQuality: { summary, tokens },
     };
-
-    globalCache.set(cacheKey, data);
-    return NextResponse.json({ ...data, cached: false });
-  } catch (err) {
-    console.error('[api/derwa] failed', err);
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { error: 'Failed to load deRWA data', detail: message },
-      { status: 502 },
-    );
-  }
 }

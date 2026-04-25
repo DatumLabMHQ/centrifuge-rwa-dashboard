@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { globalCache } from '@/lib/sdk/cache';
+import { swr } from '@/lib/sdk/kv-cache';
 import { getDerwaContext } from '@/lib/data/derwa-context';
 import { scanPoolSwaps, type SwapsSnapshot } from '@/lib/data/onchain/swap-events';
 import {
@@ -23,13 +23,14 @@ import {
 import { batchEthCall } from '@/lib/data/onchain/rpc';
 
 const WRAPPER_SYMBOLS = new Set(['deJTRSY', 'deJAAA', 'deCRDX', 'deSPXA']);
-const DEFAULT_TTL_S = 3600;
+const DEFAULT_FRESH_TTL_S = 1800; // 30 min — DEX volume changes slowly enough
+const DEFAULT_STALE_TTL_S = 14_400; // 4 hours — keep stale data usable through quiet periods
 const ALLOWED_DAYS = new Set([30, 60, 90, 180]);
 
-function ttlMs(): number {
+function freshTtlS(): number {
   const raw = process.env.CACHE_TTL_SWAPS;
-  const seconds = raw ? Number(raw) : DEFAULT_TTL_S;
-  return (Number.isFinite(seconds) ? seconds : DEFAULT_TTL_S) * 1000;
+  const v = raw ? Number(raw) : DEFAULT_FRESH_TTL_S;
+  return Number.isFinite(v) ? v : DEFAULT_FRESH_TTL_S;
 }
 
 interface ResponsePayload {
@@ -79,13 +80,8 @@ export async function GET(
     const requested = Number(url.searchParams.get('days') ?? '90');
     const days = ALLOWED_DAYS.has(requested) ? requested : 90;
 
-    const cacheKey = `centrifuge:swaps:${symbol}:${days}`;
-    const cached = globalCache.get<ResponsePayload>(cacheKey, ttlMs());
-    if (cached) {
-      return NextResponse.json({ ...cached, cached: true });
-    }
-
-    // Resolve the wrapper's DEX pool from the context registry.
+    // Resolve the wrapper's DEX pool from the context registry. This part
+    // happens outside SWR because it's pure config lookup, not a fetch.
     const ctx = getDerwaContext(symbol);
     const dex = ctx?.integrations.find(
       (i) => i.kind === 'dex' && i.status === 'live' && i.address,
@@ -97,51 +93,53 @@ export async function GET(
       );
     }
 
-    // Aerodrome on Base is the only live DEX integration for our wrappers.
-    // Hardcode to 'base' for now — when more chains come online this will
-    // resolve from the integration entry's chain field.
     const network = 'base' as const;
     const pool = dex.address;
+    const cacheKey = `centrifuge:swaps:${symbol}:${days}`;
 
-    const tokens = await fetchPoolTokens(network, pool);
-    if (!tokens) {
-      return NextResponse.json(
-        { error: 'Failed to read pool token0/token1 from RPC' },
-        { status: 502 },
-      );
-    }
+    const result = await swr<ResponsePayload>(
+      cacheKey,
+      { freshTtlS: freshTtlS() },
+      async () => {
+        const tokens = await fetchPoolTokens(network, pool);
+        if (!tokens) {
+          throw new Error('Failed to read pool token0/token1 from RPC');
+        }
+        // Run on-chain scan and GeckoTerminal fetch in parallel.
+        const [onchain, gecko] = await Promise.all([
+          scanPoolSwaps({
+            network,
+            pool,
+            token0: tokens.token0,
+            token1: tokens.token1,
+            lookbackDays: days,
+          }).catch((err) => {
+            console.warn('[api/swaps] on-chain scan failed', err);
+            return null;
+          }),
+          getPoolOhlcv(network, pool, days),
+        ]);
+        const reconciliation =
+          onchain && gecko ? reconcileVolumes(onchain.series, gecko.series) : null;
+        return {
+          symbol,
+          pool,
+          network,
+          windowDays: days,
+          onchain,
+          gecko,
+          reconciliation,
+        };
+      },
+    );
 
-    // Run on-chain scan and GeckoTerminal fetch in parallel.
-    const [onchain, gecko] = await Promise.all([
-      scanPoolSwaps({
-        network,
-        pool,
-        token0: tokens.token0,
-        token1: tokens.token1,
-        lookbackDays: days,
-      }).catch((err) => {
-        console.warn('[api/swaps] on-chain scan failed', err);
-        return null;
-      }),
-      getPoolOhlcv(network, pool, days),
-    ]);
-
-    const reconciliation =
-      onchain && gecko
-        ? reconcileVolumes(onchain.series, gecko.series)
-        : null;
-
-    const payload: ResponsePayload = {
-      symbol,
-      pool,
-      network,
-      windowDays: days,
-      onchain,
-      gecko,
-      reconciliation,
-    };
-    globalCache.set(cacheKey, payload);
-    return NextResponse.json({ ...payload, cached: false });
+    void DEFAULT_STALE_TTL_S; // doc'd default; swr() supplies its own internal fallback
+    return NextResponse.json({
+      ...result.data,
+      cached: result.cached,
+      stale: result.stale,
+      ageSeconds: result.ageSeconds,
+    });
   } catch (err) {
     console.error('[api/derwa/[symbol]/swaps] failed', err);
     const message = err instanceof Error ? err.message : 'Unknown error';
