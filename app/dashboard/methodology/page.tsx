@@ -56,16 +56,8 @@ function Intro() {
         </p>
         <p style={{ color: 'var(--text-muted)' }}>
           <strong>Last updated:</strong> 2026-04-25. Methodology is versioned
-          with the source — see{' '}
-          <a
-            href="https://github.com/Olusegun-Aborode/centrifuge-rwa-dashboard"
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: 'var(--accent-orange)' }}
-          >
-            the GitHub repository
-          </a>{' '}
-          for the full commit history of every aggregator.
+          alongside the source — every change to a calculation ships in the
+          same commit as the change to its description here.
         </p>
       </div>
     </TuiPanel>
@@ -813,63 +805,29 @@ function Cadence() {
 
 function CodeReference() {
   return (
-    <TuiPanel title="CODE REFERENCE">
-      <div className="prose-style space-y-2">
+    <TuiPanel title="MAINTAINER & ATTRIBUTION">
+      <div className="prose-style space-y-3">
         <p style={{ fontSize: 12 }}>
-          Every aggregator and reader on this page is open source. Direct
-          links to the canonical implementation:
-        </p>
-        <ul style={{ fontSize: 12, paddingLeft: 18, lineHeight: 1.7 }}>
-          <li>
-            <code>lib/data/onchain/registry.ts</code> — token addresses,
-            decimals, deployment blocks
-          </li>
-          <li>
-            <code>lib/data/onchain/supply.ts</code> — multi-chain{' '}
-            <code>totalSupply()</code> reader (Tier 1)
-          </li>
-          <li>
-            <code>lib/data/onchain/swap-events.ts</code> — Aerodrome Swap event
-            scanner
-          </li>
-          <li>
-            <code>lib/data/onchain/holders.ts</code> — Transfer-event-based
-            holder reader (built, opt-in)
-          </li>
-          <li>
-            <code>lib/data/onchain/rpc.ts</code> — batched JSON-RPC helper with
-            retry/backoff
-          </li>
-          <li>
-            <code>lib/data/centrifuge.ts</code> — Centrifuge GraphQL client
-            (Tier 2 primary)
-          </li>
-          <li>
-            <code>lib/data/protocol-yield.ts</code> — Daily Pool Yield aggregator
-          </li>
-          <li>
-            <code>lib/data/reconcile.ts</code> — Tier 1 vs Tier 2 reconciliation
-            (Tier 3)
-          </li>
-          <li>
-            <code>lib/data/aggregate.ts</code>, <code>lib/data/derwa-aggregate.ts</code>{' '}
-            — page-level rollups
-          </li>
-        </ul>
-        <p style={{ fontSize: 12, marginTop: 14 }}>
-          Source repository:{' '}
-          <a
-            href="https://github.com/Olusegun-Aborode/centrifuge-rwa-dashboard"
-            target="_blank"
-            rel="noreferrer"
+          This dashboard is built and maintained by{' '}
+          <Link
+            href="https://www.datumlab.xyz"
             style={{ color: 'var(--accent-orange)' }}
           >
-            github.com/Olusegun-Aborode/centrifuge-rwa-dashboard
-          </a>
-          . The dashboard is maintained by{' '}
-          <Link href="https://www.datumlab.xyz" style={{ color: 'var(--accent-orange)' }}>
             Datum Labs
           </Link>
+          . It is independent of Centrifuge: we&apos;re consumers of their
+          public APIs and on-chain contracts, not affiliated with the
+          protocol team. If a number on this page disagrees with one on
+          centrifuge.io, that&apos;s our problem to investigate, not theirs.
+        </p>
+        <p style={{ fontSize: 12 }}>
+          Methodology and data-quality questions:{' '}
+          <a
+            href="mailto:hello@datumlab.xyz"
+            style={{ color: 'var(--accent-orange)' }}
+          >
+            hello@datumlab.xyz
+          </a>
           .
         </p>
       </div>
