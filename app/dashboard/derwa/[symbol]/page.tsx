@@ -29,6 +29,7 @@ import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import DataQualityBadge from '@/components/ui/DataQualityBadge';
+import { ProtocolLogo } from '@/components/ui/ProtocolLogo';
 import { ChartPanel } from '@/components/ChartPanel';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
@@ -236,7 +237,7 @@ export default function DerwaDetailPage() {
             style={{ borderBottom: '1px solid var(--border)' }}
           >
             <div className="flex items-center gap-3">
-              <IntegrationBadge kind="lending" />
+              <ProtocolLogo protocol="Morpho" kind="lending" />
               <div>
                 <div className="text-[12px] font-bold">Morpho</div>
                 <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
@@ -266,7 +267,7 @@ export default function DerwaDetailPage() {
         ) : data && (
           <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
             <div className="flex items-center gap-3">
-              <IntegrationBadge kind="lending" />
+              <ProtocolLogo protocol="Morpho" kind="lending" />
               <div>
                 <div className="text-[12px] font-bold">Morpho</div>
                 <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>No live market data</div>
@@ -284,7 +285,7 @@ export default function DerwaDetailPage() {
             style={{ borderBottom: '1px solid var(--border)' }}
           >
             <div className="flex items-center gap-3">
-              <IntegrationBadge kind="dex" />
+              <ProtocolLogo protocol="Aerodrome" kind="dex" />
               <div>
                 <div className="text-[12px] font-bold">Aerodrome</div>
                 <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
@@ -320,7 +321,7 @@ export default function DerwaDetailPage() {
             className="flex items-center justify-between px-4 py-3 hover:bg-[var(--card-hover)] transition-colors"
           >
             <div className="flex items-center gap-3">
-              <IntegrationBadge kind="lending" />
+              <ProtocolLogo protocol="Euler" kind="lending" />
               <div>
                 <div className="text-[12px] font-bold">Euler</div>
                 <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
@@ -358,7 +359,7 @@ export default function DerwaDetailPage() {
                 className="flex items-center justify-between px-4 py-3"
               >
                 <div className="flex items-center gap-3">
-                  <IntegrationBadge kind="lending" />
+                  <ProtocolLogo protocol={i.protocol} kind="lending" />
                   <div>
                     <div className="text-[12px] font-bold">{i.protocol}</div>
                     <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{i.chain}</div>
@@ -410,7 +411,7 @@ export default function DerwaDetailPage() {
                   style={idx < arr.length - 1 ? { borderBottom: '1px solid var(--border)' } : undefined}
                 >
                   <div className="flex items-center gap-3">
-                    <IntegrationBadge kind="oracle" />
+                    <ProtocolLogo protocol={i.protocol} kind="oracle" />
                     <div>
                       <div className="text-[12px] font-bold">{i.protocol}</div>
                       <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>

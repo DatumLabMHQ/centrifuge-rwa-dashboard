@@ -14,8 +14,10 @@ import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { DerwaData, DerwaWrapperRow } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import DataQualityBadge from '@/components/ui/DataQualityBadge';
+import { ProtocolStack } from '@/components/ui/ProtocolLogo';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
+import { getDerwaContext } from '@/lib/data/derwa-context';
 
 const RANGE_DAYS: Record<TimeRange, number> = {
   '7D': 7,
@@ -159,6 +161,7 @@ export default function DerwaPage() {
                   </th>
                   <th className="text-right">DEX Vol 24h</th>
                   <th className="text-right">Premium</th>
+                  <th>Integrations</th>
                   <th>Trend ({range.toLowerCase()})</th>
                 </tr>
               </thead>
@@ -272,10 +275,40 @@ function ComparisonRow({
           `${w.dex.premiumPct >= 0 ? '+' : ''}${w.dex.premiumPct.toFixed(2)}%`
         )}
       </td>
+      <td>
+        <IntegrationsCell symbol={w.symbol} />
+      </td>
       <td style={{ width: 140, padding: '6px 14px' }}>
         <Sparkline points={w.sparkline} />
       </td>
     </tr>
+  );
+}
+
+/**
+ * Compact stack of LIVE protocol logos for a wrapper. Reads the static
+ * derwa-context registry — no extra API call. Shows DEX + lending venues
+ * (the places users can actually transact); oracle feeds are surfaced on
+ * the wrapper detail page in their own panel and excluded here to keep
+ * the table cell legible.
+ *
+ * Falls back to "—" when no live integrations exist for a wrapper.
+ */
+function IntegrationsCell({ symbol }: { symbol: string }) {
+  const ctx = getDerwaContext(symbol);
+  const live =
+    ctx?.integrations.filter(
+      (i) => i.status === 'live' && (i.kind === 'dex' || i.kind === 'lending'),
+    ) ?? [];
+  if (live.length === 0) {
+    return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+  }
+  return (
+    <ProtocolStack
+      protocols={live.map((i) => ({ protocol: i.protocol, kind: i.kind }))}
+      size={22}
+      max={4}
+    />
   );
 }
 
