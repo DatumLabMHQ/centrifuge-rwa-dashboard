@@ -5,8 +5,12 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -23,6 +27,14 @@ import { ChartPanel } from '@/components/ChartPanel';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
 import DataQualityBadge from '@/components/ui/DataQualityBadge';
+import type { ProtocolYieldData } from '@/lib/data/protocol-yield';
+import type { DefiLlamaRevenueData } from '@/lib/data/defillama-fees';
+
+interface ProtocolYieldResponse {
+  yield: ProtocolYieldData;
+  revenue: DefiLlamaRevenueData | null;
+  cached?: boolean;
+}
 
 /** Bright-theme chart palette — picked to read well on white. */
 const CHART_COLORS = [
@@ -101,6 +113,14 @@ export default function OverviewPage() {
   const tvlHistory = useQuery<TvlHistoryData>({
     queryKey: ['tvl-history'],
     queryFn: () => fetchJson<TvlHistoryData>('/api/tvl-history'),
+  });
+
+  // Daily Pool Yield + DefiLlama Revenue. Best-effort — Overview still
+  // renders if this query fails.
+  const yieldQuery = useQuery<ProtocolYieldResponse>({
+    queryKey: ['protocol-yield', 90],
+    queryFn: () => fetchJson<ProtocolYieldResponse>('/api/protocol-yield?days=90'),
+    retry: false,
   });
 
   const slicedSeries = useMemo(() => {
@@ -270,6 +290,9 @@ export default function OverviewPage() {
           </ResponsiveContainer>
         </ChartPanel>
       )}
+
+      {/* ─── Protocol economics: Daily Pool Yield + Protocol Revenue ─── */}
+      <ProtocolEconomicsSection data={yieldQuery.data} loading={yieldQuery.isLoading} />
 
       {/* ─── Asset class composition (horizontal bars) + Top pools ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -528,6 +551,233 @@ function AssetClassBars({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Protocol economics panel — Daily Pool Yield (Centrifuge GraphQL) +
+ * Protocol Revenue (DefiLlama). Two complementary sources, surfaced
+ * together so the gap between them is visible (gross pool yield vs. the
+ * cut the protocol actually captures).
+ *
+ * Daily yield is shown as the 7-day rolling sum (smooths NAV-vs-flow
+ * timing noise that averages out within a week). Headline APY is
+ * computed from that same rolling-7d figure annualized.
+ */
+function ProtocolEconomicsSection({
+  data,
+  loading,
+}: {
+  data?: ProtocolYieldResponse;
+  loading: boolean;
+}) {
+  if (loading || !data) {
+    return <PanelSkeleton height="h-72" label="Protocol Economics" />;
+  }
+  const y = data.yield;
+  const r = data.revenue;
+  const series = y.series;
+
+  // Combine into a single series for the chart. yield is per-day rolling
+  // (Centrifuge), revenue is per-day from DefiLlama. We left-join on date
+  // so missing revenue days render as 0 rather than dropping.
+  const revenueByDate = new Map<string, number>();
+  if (r) {
+    for (const p of r.series) revenueByDate.set(p.date, p.revenueUsd);
+  }
+  const merged = series.map((p) => ({
+    date: p.date,
+    rolling7d: p.yieldUsd7dRolling,
+    revenue: revenueByDate.get(p.date) ?? 0,
+  }));
+
+  // Slice to last 90 days to keep the chart readable.
+  const last90 = merged.slice(-90);
+
+  const apySigned = y.apyPct;
+  const apyColor =
+    apySigned > 0 ? 'var(--accent-green)' : apySigned < 0 ? 'var(--accent-red)' : 'var(--foreground)';
+
+  return (
+    <div className="space-y-4">
+      {/* Headline metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div
+          className="rounded px-4 py-3"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <div className="counter-label">Tracked NAV</div>
+          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>
+            {formatCurrency(y.endingNavUsd)}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            Across all V3 pool snapshots
+          </div>
+        </div>
+        <div
+          className="rounded px-4 py-3"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <div className="counter-label">7-Day Pool Yield</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: apyColor, lineHeight: 1.2 }}>
+            {formatCurrency(y.totalYield7d)}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            NAV growth net of investor flows
+          </div>
+        </div>
+        <div
+          className="rounded px-4 py-3"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <div className="counter-label">Implied APY</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: apyColor, lineHeight: 1.2 }}>
+            {y.apyPct.toFixed(2)}%
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            7d-trailing yield, annualized
+          </div>
+        </div>
+        <div
+          className="rounded px-4 py-3"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <div className="counter-label">Protocol Revenue 30d</div>
+          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>
+            {r?.total30dUsd != null ? formatCurrency(r.total30dUsd) : '—'}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            DefiLlama protocol fee cut
+          </div>
+        </div>
+      </div>
+
+      {/* Combined chart */}
+      <ChartPanel
+        title="POOL YIELD vs PROTOCOL REVENUE"
+        badge="Centrifuge GraphQL · DefiLlama · last 90d"
+        height="h-72"
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={last90} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fill: '#64748B' }}
+              tickFormatter={(d: string) => formatXAxisDate(d, '90D')}
+              stroke="#CBD5E1"
+              interval={Math.max(0, Math.floor(last90.length / 10) - 1)}
+              minTickGap={20}
+            />
+            <YAxis
+              yAxisId="yield"
+              tick={{ fontSize: 10, fill: '#64748B' }}
+              tickFormatter={(v) => formatCurrency(Number(v))}
+              stroke="#CBD5E1"
+              width={70}
+            />
+            <YAxis
+              yAxisId="rev"
+              orientation="right"
+              tick={{ fontSize: 10, fill: '#64748B' }}
+              tickFormatter={(v) => formatCurrency(Number(v))}
+              stroke="#CBD5E1"
+              width={70}
+            />
+            <Tooltip content={<EconomicsTooltip />} />
+            <Legend
+              verticalAlign="top"
+              height={28}
+              iconType="circle"
+              iconSize={9}
+              wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
+            />
+            <Area
+              yAxisId="yield"
+              type="monotone"
+              dataKey="rolling7d"
+              name="Pool Yield (7d rolling)"
+              stroke="#2563EB"
+              fill="#2563EB"
+              fillOpacity={0.18}
+              strokeWidth={1.75}
+            />
+            <Bar
+              yAxisId="rev"
+              dataKey="revenue"
+              name="Protocol Revenue (DefiLlama)"
+              fill="#EA580C"
+              fillOpacity={0.85}
+              barSize={4}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </ChartPanel>
+
+      <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+        <strong>Methodology.</strong> Pool Yield = daily NAV growth − investor
+        flows, summed over a 7-day rolling window to absorb 1–2 day timing
+        gaps between NAV updates and investor transactions. Sourced from
+        Centrifuge GraphQL (poolSnapshots, tokenSnapshots, investorTransactions).
+        Includes management fees and asset-side yield combined — Centrifuge&apos;s
+        indexer doesn&apos;t expose fee accruals separately. Protocol Revenue
+        is the DefiLlama estimate of fees the Centrifuge protocol captures
+        (a small fraction of pool yield).
+      </div>
+    </div>
+  );
+}
+
+interface EconomicsTooltipPayload {
+  name?: string;
+  value?: number;
+  color?: string;
+  dataKey?: string;
+}
+function EconomicsTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: EconomicsTooltipPayload[];
+  label?: string;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  return (
+    <div
+      style={{
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: 4,
+        fontSize: 11,
+        padding: '10px 12px',
+        boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+        minWidth: 180,
+      }}
+    >
+      <div style={{ color: '#0F172A', fontWeight: 700, marginBottom: 6 }}>
+        {label ? formatTooltipDate(String(label)) : ''}
+      </div>
+      {payload.map((p, i) => (
+        <div
+          key={i}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '2px 0',
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color }} />
+            {p.name}
+          </span>
+          <span style={{ fontWeight: 600 }}>{formatCurrency(Number(p.value ?? 0))}</span>
+        </div>
+      ))}
     </div>
   );
 }

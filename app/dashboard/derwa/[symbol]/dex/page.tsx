@@ -3,16 +3,50 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { ErrorState, TuiPanel } from '@/components/sdk';
 import { formatCurrency } from '@/lib/format';
 import { formatAddress } from '@/lib/sdk/helpers';
 import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
+import { ChartPanel } from '@/components/ChartPanel';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
+import type { SwapsSnapshot } from '@/lib/data/onchain/swap-events';
+import type {
+  GeckoOhlcvSnapshot,
+  VolumeReconciliation,
+} from '@/lib/data/geckoterminal-ohlcv';
 
 async function fetchDetail(symbol: string): Promise<DerwaDetailData> {
   const res = await fetch(`/api/derwa/${symbol}?days=365`);
   if (!res.ok) throw new Error('Failed to load');
+  return res.json();
+}
+
+interface SwapsResponse {
+  symbol: string;
+  pool: string;
+  network: string;
+  windowDays: number;
+  onchain: SwapsSnapshot | null;
+  gecko: GeckoOhlcvSnapshot | null;
+  reconciliation: VolumeReconciliation | null;
+  cached?: boolean;
+}
+
+async function fetchSwaps(symbol: string): Promise<SwapsResponse> {
+  const res = await fetch(`/api/derwa/${symbol}/swaps?days=90`);
+  if (!res.ok) throw new Error('Failed to load swap activity');
   return res.json();
 }
 
@@ -24,6 +58,13 @@ export default function DexSubPage() {
     queryKey: ['derwa-detail', symbol, 365],
     queryFn: () => fetchDetail(symbol),
     enabled: !!symbol,
+  });
+
+  const swaps = useQuery<SwapsResponse>({
+    queryKey: ['swaps', symbol, 90],
+    queryFn: () => fetchSwaps(symbol),
+    enabled: !!symbol,
+    retry: false,
   });
 
   if (detail.isError) {
@@ -139,6 +180,9 @@ export default function DexSubPage() {
             </div>
           </TuiPanel>
 
+          {/* Daily Swap Activity (on-chain) + GeckoTerminal validation */}
+          <SwapActivitySection data={swaps.data} loading={swaps.isLoading} error={swaps.isError} />
+
           {/* Pool details */}
           <TuiPanel title="POOL DETAILS" noPadding>
             <div className="overflow-x-auto">
@@ -181,6 +225,235 @@ function MetricTile({ label, value, sub, color }: { label: string; value: string
       <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{label}</div>
       <div className="text-[16px] font-bold mt-0.5" style={{ color: clr, lineHeight: 1.2 }}>{value}</div>
       <div className="text-[9px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{sub}</div>
+    </div>
+  );
+}
+
+const RECON_STYLE: Record<
+  VolumeReconciliation['level'],
+  { label: string; bg: string; fg: string }
+> = {
+  ok: { label: 'VERIFIED', bg: 'rgba(46, 204, 113, 0.14)', fg: 'var(--accent-green)' },
+  minor: { label: 'MINOR DRIFT', bg: 'rgba(217, 119, 6, 0.16)', fg: 'var(--yellow)' },
+  major: { label: 'MAJOR DRIFT', bg: 'rgba(214, 50, 46, 0.14)', fg: 'var(--accent-red)' },
+  'no-overlap': { label: 'UNVERIFIED', bg: 'var(--surface-2)', fg: 'var(--text-muted)' },
+};
+
+function ReconBadge({ recon }: { recon: VolumeReconciliation | null }) {
+  if (!recon) return null;
+  const s = RECON_STYLE[recon.level];
+  return (
+    <span
+      title={recon.message}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.08em',
+        fontWeight: 600,
+        padding: '3px 8px',
+        borderRadius: 3,
+        background: s.bg,
+        color: s.fg,
+        cursor: 'help',
+        textTransform: 'uppercase',
+      }}
+    >
+      <span
+        aria-hidden
+        style={{ width: 6, height: 6, borderRadius: '50%', background: s.fg }}
+      />
+      {s.label} · {recon.divergence === 0 ? '0%' : `${(recon.divergence * 100).toFixed(2)}%`}
+    </span>
+  );
+}
+
+/**
+ * Daily swap activity panel — on-chain Swap event aggregation as the
+ * primary source, with GeckoTerminal volume overlaid for validation.
+ *
+ * The reconciliation badge surfaces the gap between the two: if it's
+ * green ("VERIFIED, < 5%") the on-chain reader is working. If it goes
+ * yellow or red the chart still renders but the reader flags it.
+ */
+function SwapActivitySection({
+  data,
+  loading,
+  error,
+}: {
+  data?: SwapsResponse;
+  loading: boolean;
+  error: boolean;
+}) {
+  if (loading) {
+    return <PanelSkeleton height="h-72" label="Daily Swap Activity" />;
+  }
+  if (error || !data) {
+    return null;
+  }
+  const oc = data.onchain;
+  const gt = data.gecko;
+  const recon = data.reconciliation;
+
+  if (!oc || oc.series.length === 0) {
+    return (
+      <TuiPanel title="DAILY SWAP ACTIVITY">
+        <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+          On-chain scan returned no Swap events for this pool yet.
+        </div>
+      </TuiPanel>
+    );
+  }
+
+  // Merge on-chain and GeckoTerminal series for a single dataset.
+  const gtByDate = new Map(gt?.series.map((d) => [d.date, d.volumeUsd]) ?? []);
+  const merged = oc.series.map((d) => ({
+    date: d.date,
+    onchainVol: d.volumeUsd,
+    geckoVol: gtByDate.get(d.date) ?? null,
+    txCount: d.txCount,
+    uniqueTraders: d.uniqueTraders,
+  }));
+
+  // Headline summary stats from the on-chain series — the authoritative numbers.
+  const totals = oc.series.reduce(
+    (acc, d) => {
+      acc.vol += d.volumeUsd;
+      acc.tx += d.txCount;
+      return acc;
+    },
+    { vol: 0, tx: 0 },
+  );
+  const allTraders = new Set<string>();
+  for (const d of oc.series) {
+    // Note: SwapDay carries a count, not the actual address set. We use the
+    // sum of distinct counts as an upper bound for "active wallets" in the
+    // headline, even though it double-counts wallets that traded multiple days.
+    void d;
+  }
+  // Instead of estimating, count peak day's distinct traders as a proxy.
+  const peakDayTraders = oc.series.reduce((m, d) => Math.max(m, d.uniqueTraders), 0);
+  void allTraders;
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <MetricTile
+          label={`Volume (${data.windowDays}d)`}
+          value={formatCurrency(totals.vol)}
+          sub="On-chain Swap events"
+        />
+        <MetricTile
+          label={`Trades (${data.windowDays}d)`}
+          value={totals.tx.toLocaleString()}
+          sub="Decoded from pool logs"
+        />
+        <MetricTile
+          label="Peak Day Traders"
+          value={peakDayTraders.toLocaleString()}
+          sub="Distinct recipients in busiest day"
+        />
+        <MetricTile
+          label="Coverage"
+          value={
+            oc.scannedChunks > 0
+              ? `${Math.round(((oc.scannedChunks - oc.failedChunks) / oc.scannedChunks) * 100)}%`
+              : '—'
+          }
+          sub={`${oc.scannedChunks} chunks · ${oc.failedChunks} failed`}
+          color={oc.failedChunks === 0 ? 'green' : oc.failedChunks > oc.scannedChunks * 0.2 ? 'red' : undefined}
+        />
+      </div>
+
+      <ChartPanel
+        title="DAILY SWAP VOLUME"
+        badge={
+          recon ? (
+            <span className="inline-flex items-center gap-2">
+              <span style={{ color: 'var(--text-muted)' }}>On-chain · validated against GeckoTerminal</span>
+              <ReconBadge recon={recon} />
+            </span>
+          ) : (
+            'On-chain Swap events'
+          )
+        }
+        height="h-72"
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={merged} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fill: '#64748B' }}
+              tickFormatter={(d: string) =>
+                d && d.length >= 10
+                  ? `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(d.slice(5,7)) - 1]} ${Number(d.slice(8,10))}`
+                  : d
+              }
+              stroke="#CBD5E1"
+              interval={Math.max(0, Math.floor(merged.length / 10) - 1)}
+              minTickGap={20}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: '#64748B' }}
+              tickFormatter={(v) => formatCurrency(Number(v))}
+              stroke="#CBD5E1"
+              width={70}
+            />
+            <Tooltip
+              contentStyle={{
+                background: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                borderRadius: 4,
+                fontSize: 11,
+              }}
+              labelStyle={{ color: '#0F172A', fontWeight: 700 }}
+              formatter={(value: unknown, name: unknown) => [
+                formatCurrency(Number(value ?? 0)),
+                String(name ?? ''),
+              ]}
+            />
+            <Legend
+              verticalAlign="top"
+              height={28}
+              iconType="circle"
+              iconSize={9}
+              wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
+            />
+            <Bar
+              dataKey="onchainVol"
+              name="On-chain Volume"
+              fill="#2563EB"
+              fillOpacity={0.85}
+              barSize={5}
+            />
+            <Line
+              type="monotone"
+              dataKey="geckoVol"
+              name="GeckoTerminal (validation)"
+              stroke="#EA580C"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+              dot={false}
+              connectNulls
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </ChartPanel>
+
+      {recon && (
+        <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          <strong>Methodology.</strong> Volume bars = USDC side of every{' '}
+          <code>Swap</code> event from pool <code>{formatAddress(data.pool)}</code> over the
+          last {data.windowDays} days, decoded from raw transaction logs via Base RPC. Dashed
+          line = GeckoTerminal&apos;s aggregated daily volume, fetched independently. Across {recon.overlapDays}{' '}
+          overlapping days, the two sources differ by{' '}
+          <strong>{(recon.divergence * 100).toFixed(2)}%</strong>{' '}
+          ({recon.message.toLowerCase().includes('agree') ? 'within' : 'beyond'} the 5% verification threshold).
+        </div>
+      )}
     </div>
   );
 }

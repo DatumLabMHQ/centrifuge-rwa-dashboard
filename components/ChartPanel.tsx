@@ -16,7 +16,8 @@ import type { ReactNode } from 'react';
 
 interface ChartPanelProps {
   title: string;
-  badge?: string;
+  /** Plain text or React node (e.g. an inline badge component). */
+  badge?: ReactNode;
   right?: ReactNode;
   height?: string; // tailwind height class, e.g. "h-80"
   children: ReactNode;
