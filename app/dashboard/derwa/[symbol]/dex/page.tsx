@@ -451,7 +451,10 @@ function SwapActivitySection({
           line = GeckoTerminal&apos;s aggregated daily volume, fetched independently. Across {recon.overlapDays}{' '}
           overlapping days, the two sources differ by{' '}
           <strong>{(recon.divergence * 100).toFixed(2)}%</strong>{' '}
-          ({recon.message.toLowerCase().includes('agree') ? 'within' : 'beyond'} the 5% verification threshold).
+          ({recon.message.toLowerCase().includes('agree') ? 'within' : 'beyond'} the 5% verification threshold).{' '}
+          <Link href="/dashboard/methodology" style={{ color: 'var(--accent-orange)' }}>
+            Full methodology →
+          </Link>
         </div>
       )}
     </div>

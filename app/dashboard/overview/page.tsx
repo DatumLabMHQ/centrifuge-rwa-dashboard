@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
   Area,
@@ -717,13 +718,15 @@ function ProtocolEconomicsSection({
 
       <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
         <strong>Methodology.</strong> Pool Yield = daily NAV growth − investor
-        flows, summed over a 7-day rolling window to absorb 1–2 day timing
+        flows, smoothed over a 7-day rolling window to absorb 1–2 day timing
         gaps between NAV updates and investor transactions. Sourced from
-        Centrifuge GraphQL (poolSnapshots, tokenSnapshots, investorTransactions).
-        Includes management fees and asset-side yield combined — Centrifuge&apos;s
-        indexer doesn&apos;t expose fee accruals separately. Protocol Revenue
-        is the DefiLlama estimate of fees the Centrifuge protocol captures
-        (a small fraction of pool yield).
+        Centrifuge GraphQL. Includes management fees and asset-side yield
+        combined — Centrifuge&apos;s indexer doesn&apos;t expose fee accruals
+        separately. Protocol Revenue is the DefiLlama estimate of fees the
+        Centrifuge protocol captures (a small fraction of pool yield).{' '}
+        <Link href="/dashboard/methodology" style={{ color: 'var(--accent-orange)' }}>
+          Full methodology →
+        </Link>
       </div>
     </div>
   );

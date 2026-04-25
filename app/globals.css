@@ -439,6 +439,18 @@ body[data-aesthetic="evolved"] .tui-panel-header { background: transparent; }
   color: var(--fg-muted); margin-bottom: 6px; font-weight: 600;
 }
 
+/* Long-form text inside dashboard panels (Methodology page, footnotes). */
+.prose-style { font-size: 13px; line-height: 1.6; color: var(--fg); }
+.prose-style p { margin-bottom: 0; }
+.prose-style code {
+  font-family: var(--font-mono); font-size: 11.5px;
+  background: var(--surface-2); padding: 1px 5px; border-radius: 3px;
+  color: var(--fg);
+}
+.prose-style strong { color: var(--fg); font-weight: 700; }
+.prose-style a { color: var(--accent-orange); text-decoration: none; }
+.prose-style a:hover { text-decoration: underline; }
+
 .data-table {
   width: 100%;
   font-size: 12.5px;

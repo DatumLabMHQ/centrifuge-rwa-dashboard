@@ -14,6 +14,12 @@ const SECTIONS = [
       { href: '/dashboard/investors', label: 'Investors', icon: '§' },
     ],
   },
+  {
+    label: 'Reference',
+    items: [
+      { href: '/dashboard/methodology', label: 'Methodology', icon: '¶' },
+    ],
+  },
 ];
 
 /**
