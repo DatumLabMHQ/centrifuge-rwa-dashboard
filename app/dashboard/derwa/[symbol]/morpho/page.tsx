@@ -245,18 +245,6 @@ export default function MorphoSubPage() {
             </div>
           </TuiPanel>
 
-          {/* CTA */}
-          {m.marketUrl && (
-            <a
-              href={m.marketUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full text-center py-3 rounded-lg font-bold text-[12px] uppercase tracking-wider transition-opacity hover:opacity-90"
-              style={{ background: 'var(--accent-orange)', color: '#FFFFFF' }}
-            >
-              Open Market on Morpho →
-            </a>
-          )}
         </>
       )}
     </div>

@@ -46,7 +46,11 @@ interface SwapsResponse {
 }
 
 async function fetchSwaps(symbol: string): Promise<SwapsResponse> {
-  const res = await fetch(`/api/derwa/${symbol}/swaps?days=90`);
+  // 30 days is a deliberate balance: fewer chunked eth_getLogs calls than
+  // 90 days, so the cold-path scan fits well under Vercel's serverless
+  // timeout. The chart still shows ~25 days of recent activity which is
+  // plenty to read a trend.
+  const res = await fetch(`/api/derwa/${symbol}/swaps?days=30`);
   if (!res.ok) throw new Error('Failed to load swap activity');
   return res.json();
 }
@@ -104,7 +108,26 @@ export default function DexSubPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricTile label="Pool TVL" value={formatCurrency(dex.tvlUsd)} sub="Total value locked" />
             <MetricTile label="Total APY" value={`${dex.apy.toFixed(2)}%`} color="green" sub="Combined yield" />
-            <MetricTile label="24h Volume" value={dex.volume1dUsd != null ? formatCurrency(dex.volume1dUsd) : '—'} sub="Trading volume" />
+            <MetricTile
+              label="24h Volume"
+              value={(() => {
+                // Prefer DefiLlama's reported volume when present. They
+                // don't always have data for every Slipstream pool — fall
+                // back to the latest day from our on-chain Swap event scan
+                // (same source the chart below uses).
+                if (dex.volume1dUsd != null) return formatCurrency(dex.volume1dUsd);
+                const series = swaps.data?.onchain?.series ?? [];
+                const last = series[series.length - 1];
+                return last ? formatCurrency(last.volumeUsd) : '—';
+              })()}
+              sub={
+                dex.volume1dUsd != null
+                  ? 'Trading volume (DefiLlama)'
+                  : swaps.data?.onchain
+                    ? 'Trading volume (on-chain Swap events)'
+                    : 'Trading volume'
+              }
+            />
             <MetricTile
               label="Premium / Discount"
               value={dex.premiumPct != null ? `${dex.premiumPct >= 0 ? '+' : ''}${dex.premiumPct.toFixed(2)}%` : '—'}

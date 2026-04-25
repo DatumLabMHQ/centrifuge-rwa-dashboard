@@ -22,6 +22,15 @@ import {
 } from '@/lib/data/geckoterminal-ohlcv';
 import { batchEthCall } from '@/lib/data/onchain/rpc';
 
+/**
+ * 5 minutes. Vercel will silently cap to whatever the project plan
+ * allows — Hobby gets 60s, Pro 300s, Enterprise more. The on-chain
+ * Swap event scan can exceed 60s on cold cache (130+ chunked
+ * eth_getLogs calls for a 90-day Base window), which is why default
+ * timeouts produced perpetual "fetching..." spinners.
+ */
+export const maxDuration = 300;
+
 const WRAPPER_SYMBOLS = new Set(['deJTRSY', 'deJAAA', 'deCRDX', 'deSPXA']);
 const DEFAULT_FRESH_TTL_S = 1800; // 30 min — DEX volume changes slowly enough
 const DEFAULT_STALE_TTL_S = 14_400; // 4 hours — keep stale data usable through quiet periods
