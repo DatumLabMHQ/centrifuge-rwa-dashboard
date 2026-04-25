@@ -821,14 +821,16 @@ function CodeReference() {
           centrifuge.io, that&apos;s our problem to investigate, not theirs.
         </p>
         <p style={{ fontSize: 12 }}>
-          Methodology and data-quality questions:{' '}
+          Methodology and data-quality questions: DM{' '}
           <a
-            href="mailto:hello@datumlab.xyz"
+            href="https://x.com/0xOptimusPrime"
+            target="_blank"
+            rel="noreferrer"
             style={{ color: 'var(--accent-orange)' }}
           >
-            hello@datumlab.xyz
-          </a>
-          .
+            @0xOptimusPrime
+          </a>{' '}
+          on X.
         </p>
       </div>
     </TuiPanel>
