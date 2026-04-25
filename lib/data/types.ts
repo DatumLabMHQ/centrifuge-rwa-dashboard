@@ -392,6 +392,14 @@ export interface PoolRow {
   name: string;
   symbol: string;
   isActive: boolean;
+  /**
+   * True when the pool is in our published "production" allowlist
+   * (matches Centrifuge's official dashboard). False for the long tail
+   * of experimental / test pools (ArkOdin, ArkTEST, peqTEST, etc.).
+   * The Pools page filters to production by default with a toggle to
+   * reveal the full set.
+   */
+  isProduction: boolean;
   assetClass: string;
   isDeRwa: boolean;
   decimals: number;

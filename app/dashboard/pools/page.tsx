@@ -35,6 +35,11 @@ export default function PoolsPage() {
   const [chainFilter, setChainFilter] = useState<string>('all');
   const [classFilter, setClassFilter] = useState<string>('all');
   const [showInactive, setShowInactive] = useState(false);
+  // Default ON: filter to Centrifuge's published "production" allowlist
+  // (4 institutional + 4 wrappers). Toggle off to reveal experimental
+  // and test pools (ArkOdin, ArkTEST, peqTEST, etc.) that exist in the
+  // indexer but aren't on Centrifuge's official dashboard.
+  const [productionOnly, setProductionOnly] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('tvlUsd');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -54,6 +59,7 @@ export default function PoolsPage() {
   const filtered = useMemo(() => {
     const rows = pools.data?.pools ?? [];
     return rows
+      .filter((p) => (productionOnly ? p.isProduction : true))
       .filter((p) => (showInactive ? true : p.tvlUsd > 0))
       .filter((p) => chainFilter === 'all' || p.chains.some((c) => c.name === chainFilter))
       .filter((p) => classFilter === 'all' || p.assetClass === classFilter)
@@ -66,7 +72,14 @@ export default function PoolsPage() {
         }
         return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number);
       });
-  }, [pools.data, chainFilter, classFilter, showInactive, sortKey, sortDir]);
+  }, [pools.data, chainFilter, classFilter, showInactive, productionOnly, sortKey, sortDir]);
+
+  // Count of pools the long-tail toggle would reveal — shown on the
+  // toggle so the user knows what they're getting.
+  const hiddenCount = useMemo(() => {
+    const rows = pools.data?.pools ?? [];
+    return rows.filter((p) => !p.isProduction && p.tvlUsd > 0).length;
+  }, [pools.data]);
 
   if (pools.isError) {
     return (
@@ -127,8 +140,22 @@ export default function PoolsPage() {
             <button
               className={`time-btn ${showInactive ? 'active' : ''}`}
               onClick={() => setShowInactive(!showInactive)}
+              title="Toggle pools with zero TVL"
             >
-              {showInactive ? 'Show all' : 'Hide $0'}
+              {showInactive ? 'Hide $0' : 'Show $0'}
+            </button>
+            <button
+              className={`time-btn ${!productionOnly ? 'active' : ''}`}
+              onClick={() => setProductionOnly(!productionOnly)}
+              title={
+                productionOnly
+                  ? `Show ${hiddenCount} additional experimental / test pools`
+                  : 'Filter back to Centrifuge\u2019s published production pools'
+              }
+            >
+              {productionOnly
+                ? `See all pools${hiddenCount > 0 ? ` (+${hiddenCount})` : ''}`
+                : 'Production only'}
             </button>
           </div>
         }

@@ -27,6 +27,7 @@ export default function MethodologyPage() {
       <DataSources />
       <ArchitectureTiers />
       <PerMetric />
+      <PoolCuration />
       <KnownQuirks />
       <Validation />
       <NotTracked />
@@ -697,6 +698,50 @@ function ValidationRow({
         <strong>Shown as:</strong> {shown} · <strong>Tolerance:</strong> {tolerance}
       </div>
     </div>
+  );
+}
+
+function PoolCuration() {
+  return (
+    <TuiPanel title="POOL CURATION">
+      <div className="prose-style space-y-3">
+        <p>
+          By default the Pools page and Overview headline counts show the
+          same set of pools Centrifuge publishes on their{' '}
+          <a
+            href="https://app.centrifuge.io/pools"
+            target="_blank"
+            rel="noreferrer"
+          >
+            official pools dashboard
+          </a>{' '}
+          — four institutional RWA tokens (JTRSY, JAAA, ACRDX, SPXA) and
+          four freely-transferable wrappers (deJTRSY, deJAAA, deCRDX,
+          deSPXA).
+        </p>
+        <p>
+          The Centrifuge V3 indexer reports more pools than this — roughly
+          a dozen experimental / test products with names like{' '}
+          <code>ArkOdin</code>, <code>ArkTEST</code>, <code>peqTEST</code>,{' '}
+          <code>p.two</code>, etc. They&apos;re marked <code>isActive</code>{' '}
+          in the indexer but aren&apos;t on Centrifuge&apos;s published
+          dashboard, presumably because they&apos;re not investable through
+          official channels yet.
+        </p>
+        <p>
+          We hide these by default to keep our headline numbers comparable
+          to Centrifuge&apos;s public figures. They&apos;re still a single
+          click away — the &ldquo;See all pools&rdquo; toggle on the Pools
+          page reveals every pool the indexer reports.
+        </p>
+        <p style={{ fontSize: 12 }}>
+          The curated allowlist lives in{' '}
+          <code>lib/data/curation.ts</code>. Adding a new production pool
+          is a one-line append; the rest of the UI picks it up
+          automatically.
+        </p>
+      </div>
+    </TuiPanel>
   );
 }
 

@@ -24,6 +24,7 @@ import {
   type TokenInstancePosition,
 } from '@/lib/data/types';
 import { preferredSupply } from '@/lib/data/reconcile';
+import { isProductionPool } from '@/lib/data/curation';
 
 /** Convert a BigInt-as-string to Number safely (loses precision over ~9e15). */
 function bn(value: string | null | undefined, decimals: number): number {
@@ -209,7 +210,15 @@ export function aggregateOverview(
     return { pool: p, token, tvlUsd, chains };
   });
 
-  const activePools = accs.filter((a) => a.tvlUsd > 0).length;
+  // Active = pool has TVL AND is on the curated production allowlist.
+  // Mirrors what Centrifuge publishes on their official dashboard
+  // (4 institutional + 4 deRWA wrappers = 8 typical). Long tail of
+  // experimental / test pools (ArkOdin, ArkTEST, peqTEST) is reachable
+  // via the Pools page "Show all" toggle but doesn't inflate the
+  // headline count.
+  const activePools = accs.filter(
+    (a) => a.tvlUsd > 0 && isProductionPool(a.token?.symbol),
+  ).length;
 
   // ─── per-chain TVL ───
   const chainMap = new Map<string, { name: string; chainId: number; tvlUsd: number }>();
@@ -398,6 +407,7 @@ export function aggregatePools(
         name: pool.name ?? token.name ?? `Pool ${pool.id}`,
         symbol: token.symbol,
         isActive: pool.isActive,
+        isProduction: isProductionPool(token.symbol),
         assetClass: classifyPool(pool, metadataMap),
         isDeRwa: isDeRwaPool(token),
         decimals: token.decimals,
