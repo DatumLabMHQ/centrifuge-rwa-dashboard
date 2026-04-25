@@ -3,23 +3,34 @@
 import { useState } from 'react';
 
 /**
- * Map of protocol-name → DefiLlama icon slug. Names match the strings
- * stored in `lib/data/derwa-context.ts:integrations[].protocol` so the
- * component can be passed a row's protocol verbatim.
+ * Map of protocol-name → logo source. Names match the strings stored in
+ * `lib/data/derwa-context.ts:integrations[].protocol` so the component
+ * can be passed a row's protocol verbatim.
  *
- * We use DefiLlama's CDN (`icons.llamao.fi/icons/protocols/<slug>`) for
- * the same reasons we use it for chain logos: stable URL convention,
- * comprehensive coverage, no maintenance overhead. Failures fall through
- * to a colored letter-pill fallback below.
+ * Two value forms are accepted:
+ *   - Bare slug (e.g. `'aerodrome'`) → resolves to DefiLlama's CDN at
+ *     `icons.llamao.fi/icons/protocols/<slug>`. We default to this
+ *     because the URL convention is stable and covers most protocols.
+ *   - Full URL (must start with `http://` or `https://`) → used as-is.
+ *     Use this when DefiLlama's slug points at a *different* protocol
+ *     with the same name, or when we want the official brand asset.
+ *
+ * Anything not in this map falls through to a colored letter-pill
+ * fallback below.
  */
 const PROTOCOL_ICON_SLUG: Record<string, string> = {
   Aerodrome: 'aerodrome',
   Morpho: 'morpho',
   Euler: 'euler',
-  // Both Chronicle feed types use the same Chronicle Labs logo.
-  'Chronicle Proof of Asset': 'chronicle',
-  'Chronicle Price Proxy': 'chronicle',
-  Chronicle: 'chronicle',
+  // DefiLlama's "chronicle" icon points at an unrelated project. Use
+  // the official Chronicle Labs logo from chroniclelabs.org directly.
+  // Both PoA and Price Proxy feeds use the same parent brand mark.
+  'Chronicle Proof of Asset':
+    'https://chroniclelabs.org/_next/static/media/Chronicle%20logo%20green.50e6db12.svg',
+  'Chronicle Price Proxy':
+    'https://chroniclelabs.org/_next/static/media/Chronicle%20logo%20green.50e6db12.svg',
+  Chronicle:
+    'https://chroniclelabs.org/_next/static/media/Chronicle%20logo%20green.50e6db12.svg',
   // Future entries add here.
 };
 
@@ -33,9 +44,12 @@ const KIND_COLOR: Record<string, string> = {
 };
 
 function protocolIconUrl(protocol: string, size = 32): string | null {
-  const slug = PROTOCOL_ICON_SLUG[protocol];
-  if (!slug) return null;
-  return `https://icons.llamao.fi/icons/protocols/${slug}?w=${size}&h=${size}`;
+  const value = PROTOCOL_ICON_SLUG[protocol];
+  if (!value) return null;
+  // Full URL passed through as-is (e.g. official brand asset). Otherwise
+  // treat as a DefiLlama slug.
+  if (value.startsWith('http://') || value.startsWith('https://')) return value;
+  return `https://icons.llamao.fi/icons/protocols/${value}?w=${size}&h=${size}`;
 }
 
 interface ProtocolLogoProps {
