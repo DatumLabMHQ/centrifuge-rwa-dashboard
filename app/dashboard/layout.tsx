@@ -1,5 +1,7 @@
+import { Suspense } from 'react';
 import CentrifugeShell from '@/components/shell/CentrifugeShell';
 import EmailGate from '@/components/shell/EmailGate';
+import PathSync from '@/components/shell/PathSync';
 
 const DASHBOARD_NAME = 'Centrifuge RWA Terminal';
 
@@ -45,6 +47,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ]}
     >
       <CentrifugeShell dashboardName={DASHBOARD_NAME} sections={SECTIONS}>
+        {/* PathSync is wrapped in <Suspense> because it reads useSearchParams,
+            which Next 16 requires be inside a Suspense boundary so the page
+            can pre-render the rest. */}
+        <Suspense fallback={null}>
+          <PathSync />
+        </Suspense>
         {children}
       </CentrifugeShell>
     </EmailGate>
