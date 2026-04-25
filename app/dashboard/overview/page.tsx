@@ -28,6 +28,7 @@ import { ChartPanel } from '@/components/ChartPanel';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
 import DataQualityBadge from '@/components/ui/DataQualityBadge';
+import { ChainStack } from '@/components/ui/ChainBadge';
 import type { ProtocolYieldData } from '@/lib/data/protocol-yield';
 import type { DefiLlamaRevenueData } from '@/lib/data/defillama-fees';
 
@@ -341,13 +342,7 @@ export default function OverviewPage() {
                           {formatCurrency(p.tvlUsd)}
                         </td>
                         <td>
-                          <div className="flex flex-wrap gap-1">
-                            {p.chains.map((c) => (
-                              <span key={c} className={`chain-badge ${c}`}>
-                                {c}
-                              </span>
-                            ))}
-                          </div>
+                          <ChainStack chains={p.chains} size={18} />
                         </td>
                       </tr>
                     ))}

@@ -20,6 +20,7 @@ import { formatAddress } from '@/lib/sdk/helpers';
 import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
+import { ChainBadge } from '@/components/ui/ChainBadge';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import type { SwapsSnapshot } from '@/lib/data/onchain/swap-events';
 import type {
@@ -198,7 +199,7 @@ export default function DexSubPage() {
                   </tr>
                   <tr>
                     <td style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Chain</td>
-                    <td><span className={`chain-badge ${dex.network}`}>{dex.network}</span></td>
+                    <td><ChainBadge chain={dex.network} /></td>
                   </tr>
                   <tr>
                     <td style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Pool Address</td>

@@ -11,6 +11,7 @@ import { formatCurrency } from '@/lib/format';
 import type { InvestorsData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
+import { ChainBadge } from '@/components/ui/ChainBadge';
 
 const EXPLORERS: Record<string, string> = {
   ethereum: 'https://etherscan.io/address/',
@@ -168,7 +169,7 @@ export default function InvestorsPage() {
                       </span>
                     </td>
                     <td>
-                      <span className={`chain-badge ${h.chain}`}>{h.chain}</span>
+                      <ChainBadge chain={h.chain} />
                     </td>
                     <td className="text-right">
                       {h.shares.toLocaleString(undefined, { maximumFractionDigits: 2 })}

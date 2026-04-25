@@ -11,6 +11,7 @@ import { formatCurrency, formatCurrencySigned } from '@/lib/format';
 import type { PoolRow, PoolsData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import DataQualityBadge from '@/components/ui/DataQualityBadge';
+import { ChainStack } from '@/components/ui/ChainBadge';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 
 type SortKey = 'tvlUsd' | 'flows30dUsd' | 'tokenPriceUsd' | 'name';
@@ -247,13 +248,7 @@ function PoolTableRow({
           {pool.flows30dUsd === 0 ? '—' : formatCurrencySigned(pool.flows30dUsd)}
         </td>
         <td>
-          <div className="flex flex-wrap gap-1">
-            {pool.chains.map((c) => (
-              <span key={c.name} className={`chain-badge ${c.name}`}>
-                {c.name}
-              </span>
-            ))}
-          </div>
+          <ChainStack chains={pool.chains.map((c) => c.name)} size={18} />
         </td>
       </tr>
       {expanded && (

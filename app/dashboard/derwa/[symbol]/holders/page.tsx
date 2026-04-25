@@ -10,6 +10,7 @@ import { formatAddress } from '@/lib/sdk/helpers';
 import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
+import { ChainBadge } from '@/components/ui/ChainBadge';
 
 const ROWS_PER_PAGE = 10;
 
@@ -105,7 +106,7 @@ export default function HoldersSubPage() {
               <tbody>
                 {chains.map((c) => (
                   <tr key={c.chain}>
-                    <td><span className={`chain-badge ${c.chain}`}>{c.chain}</span></td>
+                    <td><ChainBadge chain={c.chain} /></td>
                     <td className="text-right">{c.holderCount}</td>
                     <td className="text-right">{c.supply.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                     <td className="text-right" style={{ fontWeight: 700 }}>{formatCurrency(c.tvlUsd)}</td>
@@ -147,7 +148,7 @@ export default function HoldersSubPage() {
                           <a href={`${explorer}${h.account}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)' }} className="hover:underline">{formatAddress(h.account)}</a>
                         ) : formatAddress(h.account)}
                       </td>
-                      <td><span className={`chain-badge ${h.chain}`}>{h.chain}</span></td>
+                      <td><ChainBadge chain={h.chain} /></td>
                       <td className="text-right">{h.shares.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                       <td className="text-right" style={{ fontWeight: 700 }}>{formatCurrency(h.valueUsd)}</td>
                       <td className="text-right" style={{ color: 'var(--accent-orange)', fontWeight: 600 }}>{pct.toFixed(2)}%</td>
@@ -195,7 +196,7 @@ export default function HoldersSubPage() {
                           <a href={`${explorer}${tx.account}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)' }} className="hover:underline">{formatAddress(tx.account)}</a>
                         ) : formatAddress(tx.account)}
                       </td>
-                      <td><span className={`chain-badge ${tx.chain}`}>{tx.chain}</span></td>
+                      <td><ChainBadge chain={tx.chain} /></td>
                       <td className="text-right">{tx.tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                       <td className="text-right" style={{ fontWeight: 700 }}>{formatCurrency(tx.valueUsd)}</td>
                     </tr>

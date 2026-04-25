@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
+import { ChainBadge } from '@/components/ui/ChainBadge';
 
 type FlowResponse = FlowData & { crossChain: CrossChainFlowData };
 
@@ -279,10 +280,10 @@ export default function FlowPage() {
                   return (
                     <tr key={i}>
                       <td>
-                        <span className={`chain-badge ${from.name}`}>{from.name}</span>
+                        <ChainBadge chain={from.name} />
                       </td>
                       <td>
-                        <span className={`chain-badge ${to.name}`}>{to.name}</span>
+                        <ChainBadge chain={to.name} />
                       </td>
                       <td className="text-right" style={{ fontWeight: 700 }}>
                         {l.value.toLocaleString()}
