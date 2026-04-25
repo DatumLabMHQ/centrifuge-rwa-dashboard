@@ -11,6 +11,7 @@ import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { ChainBadge } from '@/components/ui/ChainBadge';
+import { ChainSumNote } from '@/components/ui/ChainSumNote';
 
 const ROWS_PER_PAGE = 10;
 
@@ -115,6 +116,14 @@ export default function HoldersSubPage() {
               </tbody>
             </table>
           </div>
+          {w && (
+            <div style={{ padding: '0 12px 12px' }}>
+              <ChainSumNote
+                chainSumUsd={chains.reduce((s, c) => s + c.tvlUsd, 0)}
+                headlineUsd={w.tvlUsd}
+              />
+            </div>
+          )}
         </TuiPanel>
       )}
 

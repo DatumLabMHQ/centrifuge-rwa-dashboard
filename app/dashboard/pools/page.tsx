@@ -12,6 +12,7 @@ import type { PoolRow, PoolsData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import DataQualityBadge from '@/components/ui/DataQualityBadge';
 import { ChainStack } from '@/components/ui/ChainBadge';
+import { ChainSumNote } from '@/components/ui/ChainSumNote';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 
 type SortKey = 'tvlUsd' | 'flows30dUsd' | 'tokenPriceUsd' | 'name';
@@ -305,6 +306,10 @@ function PoolTableRow({
                     ))}
                   </tbody>
                 </table>
+                <ChainSumNote
+                  chainSumUsd={pool.chains.reduce((s, c) => s + c.tvlUsd, 0)}
+                  headlineUsd={pool.tvlUsd}
+                />
               </div>
             </div>
           </td>
@@ -313,3 +318,4 @@ function PoolTableRow({
     </>
   );
 }
+
