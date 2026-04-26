@@ -386,24 +386,6 @@ function PerMetric() {
           ]}
         />
         <Metric
-          name="Daily Pool Yield · Implied APY"
-          where="Overview"
-          formula={
-            <>
-              <code>yield[t] = NAV[t] − NAV[t−1] − net_flow[t]</code>, then a
-              7-day rolling sum is shown on the chart and used as the headline
-              number. APY ={' '}
-              <code>(7d_rolling ÷ NAV) × (365 ÷ 7) × 100</code>.
-            </>
-          }
-          notes={[
-            'Daily yield is noisy because indexer NAV updates lag investor flows by 1\u20132 days. A $25M flow on day N often shows up in NAV on day N+2, producing a +$25M "yield" on the wrong day that\u2019s offset by a −$25M day later. Smoothing over 7 days absorbs this.',
-            'Validity guards: a day is dropped from the calculation if NAV < $100M (history bootstrap) or if NAV jumps more than 2× day-over-day (snapshot data event, not real yield).',
-            'APY is capped at ±50%. Anything beyond means inputs are broken; we\u2019d rather show 0% than mislead.',
-            'Honest label: this is "yield + management fees combined." Centrifuge\u2019s indexer doesn\u2019t expose fee accruals separately, so we don\u2019t try to isolate them.',
-          ]}
-        />
-        <Metric
           name="DEX Volume · Daily Swap Activity"
           where="deSPXA dex subpage"
           formula={
@@ -556,31 +538,6 @@ function KnownQuirks() {
               GeckoTerminal) catches when this materially affects volume.
               Production deployments should use a paid RPC; the env-var
               override is documented in <code>lib/data/onchain/rpc.ts</code>.
-            </>
-          }
-        />
-        <Quirk
-          label="The Centrifuge indexer has no fee/revenue entity"
-          body={
-            <>
-              Fees aren&apos;t emitted as discrete events in V3 — they&apos;re
-              folded into NAV updates. Our &ldquo;Daily Pool Yield&rdquo;
-              tile reflects the gross of yield plus fees combined; we don&apos;t
-              try to isolate the protocol cut because there&apos;s no
-              first-party data source for it.
-            </>
-          }
-        />
-        <Quirk
-          label="Snapshot data bootstraps mid-window"
-          body={
-            <>
-              <code>tokenSnapshot</code> rows are only emitted when something
-              triggers them (a NAV update, a transfer, a fee accrual). Pre-bootstrap
-              days look like $0 NAV in the rollup, even though the pool clearly
-              had supply. Our yield calculation guards against this with a
-              $100M floor and a 2× day-over-day ratio cap — days where NAV
-              &ldquo;appears&rdquo; or doubles aren&apos;t real yield.
             </>
           }
         />
@@ -850,12 +807,6 @@ function Cadence() {
               <td>5 min</td>
               <td>20 min</td>
               <td>Detail pages — same cadence as their list views</td>
-            </tr>
-            <tr>
-              <td><code>/api/protocol-yield</code></td>
-              <td>1 hour</td>
-              <td>1 hour (capped)</td>
-              <td>Heavy compute (one tokenSnapshots call per pool); yield is a slow-moving figure</td>
             </tr>
             <tr>
               <td><code>/api/derwa/[symbol]/swaps</code></td>
