@@ -1,14 +1,42 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { ErrorState, TuiPanel } from '@/components/sdk';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import {
+  ErrorState,
+  TuiPanel,
+} from '@/components/sdk';
 import { formatCurrency } from '@/lib/format';
-import type { OverviewData } from '@/lib/data/types';
+import type { OverviewData, TvlHistoryData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
+import { ChartPanel } from '@/components/ChartPanel';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
+import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
 import DataQualityBadge from '@/components/ui/DataQualityBadge';
 import { ChainStack } from '@/components/ui/ChainBadge';
+import type { ProtocolYieldData } from '@/lib/data/protocol-yield';
+import type { DefiLlamaRevenueData } from '@/lib/data/defillama-fees';
+
+interface ProtocolYieldResponse {
+  yield: ProtocolYieldData;
+  revenue: DefiLlamaRevenueData | null;
+  cached?: boolean;
+}
 
 /** Bright-theme chart palette — picked to read well on white. */
 const CHART_COLORS = [
@@ -31,11 +59,77 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+const RANGE_DAYS: Record<TimeRange, number> = {
+  '7D': 7,
+  '30D': 30,
+  '90D': 90,
+  '365D': 365,
+};
+
+const SHORT_MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/**
+ * Format a `YYYY-MM-DD` date string for the X-axis based on the active range.
+ * - 365D → "MMM 'YY" (e.g. "Apr '25")
+ * - 90D / 30D → "MMM D" (e.g. "Apr 7")
+ * - 7D → "MMM D"
+ */
+function formatXAxisDate(date: string, range: TimeRange): string {
+  if (!date || date.length < 10) return date;
+  const year = date.slice(2, 4); // last 2 digits
+  const monthIdx = Number(date.slice(5, 7)) - 1;
+  const day = Number(date.slice(8, 10));
+  const month = SHORT_MONTHS[monthIdx] ?? '';
+  if (range === '365D') return `${month} '${year}`;
+  return `${month} ${day}`;
+}
+
+/** Pick a tick interval that targets ~10 visible ticks regardless of range. */
+function pickTickInterval(seriesLength: number): number {
+  if (seriesLength <= 12) return 0;
+  return Math.max(0, Math.floor(seriesLength / 10) - 1);
+}
+
+/** Format the tooltip date label as a long form: "Apr 7, 2025". */
+function formatTooltipDate(date: string): string {
+  if (!date || date.length < 10) return date;
+  const year = date.slice(0, 4);
+  const monthIdx = Number(date.slice(5, 7)) - 1;
+  const day = Number(date.slice(8, 10));
+  const month = SHORT_MONTHS[monthIdx] ?? '';
+  return `${month} ${day}, ${year}`;
+}
+
 export default function OverviewPage() {
+  const [range, setRange] = useState<TimeRange>('365D');
+  const [hiddenChains, setHiddenChains] = useState<Set<string>>(new Set());
+
   const overview = useQuery<OverviewData>({
     queryKey: ['overview'],
     queryFn: () => fetchJson<OverviewData>('/api/overview'),
   });
+
+  const tvlHistory = useQuery<TvlHistoryData>({
+    queryKey: ['tvl-history'],
+    queryFn: () => fetchJson<TvlHistoryData>('/api/tvl-history'),
+  });
+
+  // Daily Pool Yield + DefiLlama Revenue. Best-effort — Overview still
+  // renders if this query fails.
+  const yieldQuery = useQuery<ProtocolYieldResponse>({
+    queryKey: ['protocol-yield', 90],
+    queryFn: () => fetchJson<ProtocolYieldResponse>('/api/protocol-yield?days=90'),
+    retry: false,
+  });
+
+  const slicedSeries = useMemo(() => {
+    if (!tvlHistory.data) return [];
+    const days = RANGE_DAYS[range];
+    return tvlHistory.data.series.slice(-days);
+  }, [tvlHistory.data, range]);
 
   if (overview.isError) {
     return (
@@ -51,18 +145,156 @@ export default function OverviewPage() {
   }
 
   const data = overview.data;
+  const history = tvlHistory.data;
+
+  const crossCheck =
+    data && history && history.totalTvlUsd > 0
+      ? ((data.totals.tvlUsd - history.totalTvlUsd) / history.totalTvlUsd) * 100
+      : null;
+
+  // Top N chains by current TVL, ignoring chains with zero TVL.
+  // (Centrifuge V3 has spokes deployed on Monad / HyperEVM that don't yet
+  // hold any value — DefiLlama still lists them, but they're noise here.)
+  const topChainKeys = Object.entries(history?.currentChainTvls ?? {})
+    .filter(([, v]) => v > 0)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 8)
+    .map(([k]) => k);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Overview"
-        subtitle="Total tokenized RWA on Centrifuge V3 — sourced directly from the protocol."
+        subtitle="Total tokenized RWA on Centrifuge V3 — live across 9 chains."
         right={
           <div className="flex items-center gap-2 flex-wrap">
             {data?.dataQuality && <DataQualityBadge report={data.dataQuality} />}
+            {crossCheck !== null && (
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-semibold"
+                style={{
+                  background: 'var(--accent-green-soft)',
+                  color: 'var(--accent-green)',
+                }}
+              >
+                <span>VERIFIED vs DEFILLAMA</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {crossCheck >= 0 ? '+' : ''}
+                  {crossCheck.toFixed(2)}%
+                </span>
+              </div>
+            )}
           </div>
         }
       />
+
+      {/* ─── TVL by Chain history ─── */}
+      {!history || slicedSeries.length === 0 ? (
+        <PanelSkeleton height="h-80" label="TVL by Chain" />
+      ) : (
+        <ChartPanel
+          title="TVL BY CHAIN"
+          badge={`DefiLlama · ${range.toLowerCase()}`}
+          height="h-80"
+          right={<TimeSlicer value={range} onChange={setRange} />}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={slicedSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <defs>
+                {topChainKeys.map((chain, i) => (
+                  <linearGradient
+                    key={chain}
+                    id={`grad-${chain}`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="5%"
+                      stopColor={CHART_COLORS[i % CHART_COLORS.length]}
+                      stopOpacity={0.35}
+                    />
+                    <stop
+                      offset="95%"
+                      stopColor={CHART_COLORS[i % CHART_COLORS.length]}
+                      stopOpacity={0.02}
+                    />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: '#64748B' }}
+                tickFormatter={(d: string) => formatXAxisDate(d, range)}
+                stroke="#CBD5E1"
+                interval={pickTickInterval(slicedSeries.length)}
+                tickMargin={8}
+                minTickGap={20}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: '#64748B' }}
+                tickFormatter={(v) => formatCurrency(Number(v))}
+                stroke="#CBD5E1"
+                width={70}
+              />
+              <Tooltip
+                content={<TvlByChainTooltip />}
+              />
+              <Legend
+                verticalAlign="top"
+                height={28}
+                iconType="circle"
+                iconSize={9}
+                wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
+                onClick={(e) => {
+                  const name = String(e.dataKey ?? '').replace(/^byChain\./, '');
+                  setHiddenChains((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(name)) next.delete(name);
+                    else next.add(name);
+                    return next;
+                  });
+                }}
+                formatter={(value: string) => {
+                  const name = value.replace(/^byChain\./, '');
+                  const isHidden = hiddenChains.has(name);
+                  return (
+                    <span
+                      style={{
+                        color: isHidden ? '#94A3B8' : '#0F172A',
+                        textDecoration: isHidden ? 'line-through' : 'none',
+                        textTransform: 'capitalize',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {name}
+                    </span>
+                  );
+                }}
+              />
+              {topChainKeys.map((chain, i) => (
+                <Area
+                  key={chain}
+                  type="monotone"
+                  dataKey={`byChain.${chain}`}
+                  name={chain}
+                  stackId="1"
+                  stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                  fill={`url(#grad-${chain})`}
+                  strokeWidth={1.75}
+                  hide={hiddenChains.has(chain)}
+                />
+              ))}
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+      )}
+
+      {/* ─── Protocol economics: Daily Pool Yield + Protocol Revenue ─── */}
+      <ProtocolEconomicsSection data={yieldQuery.data} loading={yieldQuery.isLoading} />
 
       {/* ─── Asset class composition (horizontal bars) + Top pools ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -122,6 +354,86 @@ export default function OverviewPage() {
             <PanelSkeleton height="h-72" label="Largest Pools" />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Custom tooltip for the TVL-by-chain area chart. Shows each chain's value
+ * (sorted descending) and a total at the bottom. Uses the same date format
+ * as `formatTooltipDate` so the header reads "Apr 7, 2026".
+ */
+interface TooltipPayloadEntry {
+  name?: string;
+  value?: number;
+  color?: string;
+  dataKey?: string;
+}
+function TvlByChainTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+  label?: string;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const sorted = [...payload].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+  const total = sorted.reduce((s, p) => s + (p.value ?? 0), 0);
+  return (
+    <div
+      style={{
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: 4,
+        fontSize: 11,
+        padding: '10px 12px',
+        boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+        minWidth: 160,
+      }}
+    >
+      <div style={{ color: '#0F172A', fontWeight: 700, marginBottom: 6 }}>
+        {label ? formatTooltipDate(String(label)) : ''}
+      </div>
+      {sorted.map((p, i) => (
+        <div
+          key={i}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '2px 0',
+            color: '#0F172A',
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textTransform: 'capitalize' }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color }} />
+            {p.name}
+          </span>
+          <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+            {formatCurrency(Number(p.value ?? 0))}
+          </span>
+        </div>
+      ))}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '6px 0 0',
+          marginTop: 4,
+          borderTop: '1px solid #E2E8F0',
+          color: '#0F172A',
+          fontWeight: 700,
+        }}
+      >
+        <span>Total</span>
+        <span style={{ color: '#EA580C', fontVariantNumeric: 'tabular-nums' }}>
+          {formatCurrency(total)}
+        </span>
       </div>
     </div>
   );
@@ -235,6 +547,235 @@ function AssetClassBars({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Protocol economics panel — Daily Pool Yield (Centrifuge GraphQL) +
+ * Protocol Revenue (DefiLlama). Two complementary sources, surfaced
+ * together so the gap between them is visible (gross pool yield vs. the
+ * cut the protocol actually captures).
+ *
+ * Daily yield is shown as the 7-day rolling sum (smooths NAV-vs-flow
+ * timing noise that averages out within a week). Headline APY is
+ * computed from that same rolling-7d figure annualized.
+ */
+function ProtocolEconomicsSection({
+  data,
+  loading,
+}: {
+  data?: ProtocolYieldResponse;
+  loading: boolean;
+}) {
+  if (loading || !data) {
+    return <PanelSkeleton height="h-72" label="Protocol Economics" />;
+  }
+  const y = data.yield;
+  const r = data.revenue;
+  const series = y.series;
+
+  // Combine into a single series for the chart. yield is per-day rolling
+  // (Centrifuge), revenue is per-day from DefiLlama. We left-join on date
+  // so missing revenue days render as 0 rather than dropping.
+  const revenueByDate = new Map<string, number>();
+  if (r) {
+    for (const p of r.series) revenueByDate.set(p.date, p.revenueUsd);
+  }
+  const merged = series.map((p) => ({
+    date: p.date,
+    rolling7d: p.yieldUsd7dRolling,
+    revenue: revenueByDate.get(p.date) ?? 0,
+  }));
+
+  // Slice to last 90 days to keep the chart readable.
+  const last90 = merged.slice(-90);
+
+  const apySigned = y.apyPct;
+  const apyColor =
+    apySigned > 0 ? 'var(--accent-green)' : apySigned < 0 ? 'var(--accent-red)' : 'var(--foreground)';
+
+  return (
+    <div className="space-y-4">
+      {/* Headline metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div
+          className="rounded px-4 py-3"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <div className="counter-label">Tracked NAV</div>
+          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>
+            {formatCurrency(y.endingNavUsd)}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            Across all V3 pool snapshots
+          </div>
+        </div>
+        <div
+          className="rounded px-4 py-3"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <div className="counter-label">7-Day Pool Yield</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: apyColor, lineHeight: 1.2 }}>
+            {formatCurrency(y.totalYield7d)}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            NAV growth net of investor flows
+          </div>
+        </div>
+        <div
+          className="rounded px-4 py-3"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <div className="counter-label">Implied APY</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: apyColor, lineHeight: 1.2 }}>
+            {y.apyPct.toFixed(2)}%
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            7d-trailing yield, annualized
+          </div>
+        </div>
+        <div
+          className="rounded px-4 py-3"
+          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
+        >
+          <div className="counter-label">Protocol Revenue 30d</div>
+          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>
+            {r?.total30dUsd != null ? formatCurrency(r.total30dUsd) : '—'}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            DefiLlama protocol fee cut
+          </div>
+        </div>
+      </div>
+
+      {/* Combined chart */}
+      <ChartPanel
+        title="POOL YIELD vs PROTOCOL REVENUE"
+        badge="Centrifuge GraphQL · DefiLlama · last 90d"
+        height="h-72"
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={last90} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fill: '#64748B' }}
+              tickFormatter={(d: string) => formatXAxisDate(d, '90D')}
+              stroke="#CBD5E1"
+              interval={Math.max(0, Math.floor(last90.length / 10) - 1)}
+              minTickGap={20}
+            />
+            <YAxis
+              yAxisId="yield"
+              tick={{ fontSize: 10, fill: '#64748B' }}
+              tickFormatter={(v) => formatCurrency(Number(v))}
+              stroke="#CBD5E1"
+              width={70}
+            />
+            <YAxis
+              yAxisId="rev"
+              orientation="right"
+              tick={{ fontSize: 10, fill: '#64748B' }}
+              tickFormatter={(v) => formatCurrency(Number(v))}
+              stroke="#CBD5E1"
+              width={70}
+            />
+            <Tooltip content={<EconomicsTooltip />} />
+            <Legend
+              verticalAlign="top"
+              height={28}
+              iconType="circle"
+              iconSize={9}
+              wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
+            />
+            <Area
+              yAxisId="yield"
+              type="monotone"
+              dataKey="rolling7d"
+              name="Pool Yield (7d rolling)"
+              stroke="#2563EB"
+              fill="#2563EB"
+              fillOpacity={0.18}
+              strokeWidth={1.75}
+            />
+            <Bar
+              yAxisId="rev"
+              dataKey="revenue"
+              name="Protocol Revenue (DefiLlama)"
+              fill="#EA580C"
+              fillOpacity={0.85}
+              barSize={4}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </ChartPanel>
+
+      <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+        <strong>Methodology.</strong> Pool Yield = daily NAV growth − investor
+        flows, smoothed over a 7-day rolling window to absorb 1–2 day timing
+        gaps between NAV updates and investor transactions. Sourced from
+        Centrifuge GraphQL. Includes management fees and asset-side yield
+        combined — Centrifuge&apos;s indexer doesn&apos;t expose fee accruals
+        separately. Protocol Revenue is the DefiLlama estimate of fees the
+        Centrifuge protocol captures (a small fraction of pool yield).{' '}
+        <Link href="/dashboard/methodology" style={{ color: 'var(--accent-orange)' }}>
+          Full methodology →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+interface EconomicsTooltipPayload {
+  name?: string;
+  value?: number;
+  color?: string;
+  dataKey?: string;
+}
+function EconomicsTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: EconomicsTooltipPayload[];
+  label?: string;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  return (
+    <div
+      style={{
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: 4,
+        fontSize: 11,
+        padding: '10px 12px',
+        boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+        minWidth: 180,
+      }}
+    >
+      <div style={{ color: '#0F172A', fontWeight: 700, marginBottom: 6 }}>
+        {label ? formatTooltipDate(String(label)) : ''}
+      </div>
+      {payload.map((p, i) => (
+        <div
+          key={i}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '2px 0',
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color }} />
+            {p.name}
+          </span>
+          <span style={{ fontWeight: 600 }}>{formatCurrency(Number(p.value ?? 0))}</span>
+        </div>
+      ))}
     </div>
   );
 }

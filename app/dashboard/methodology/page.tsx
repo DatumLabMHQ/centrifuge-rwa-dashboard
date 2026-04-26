@@ -120,6 +120,24 @@ function DataSources() {
             <tr>
               <td>
                 <a
+                  href="https://defillama.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: 'var(--accent-orange)' }}
+                >
+                  DefiLlama
+                </a>
+              </td>
+              <td>REST · aggregator</td>
+              <td>
+                Historical TVL series for cross-validation; protocol fee
+                revenue (no first-party equivalent exists)
+              </td>
+              <td>Tier 2 · validation only for TVL</td>
+            </tr>
+            <tr>
+              <td>
+                <a
                   href="https://www.geckoterminal.com"
                   target="_blank"
                   rel="noreferrer"
@@ -368,6 +386,38 @@ function PerMetric() {
           ]}
         />
         <Metric
+          name="Daily Pool Yield · Implied APY"
+          where="Overview"
+          formula={
+            <>
+              <code>yield[t] = NAV[t] − NAV[t−1] − net_flow[t]</code>, then a
+              7-day rolling sum is shown on the chart and used as the headline
+              number. APY ={' '}
+              <code>(7d_rolling ÷ NAV) × (365 ÷ 7) × 100</code>.
+            </>
+          }
+          notes={[
+            'Daily yield is noisy because indexer NAV updates lag investor flows by 1\u20132 days. A $25M flow on day N often shows up in NAV on day N+2, producing a +$25M "yield" on the wrong day that\u2019s offset by a −$25M day later. Smoothing over 7 days absorbs this.',
+            'Validity guards: a day is dropped from the calculation if NAV < $100M (history bootstrap) or if NAV jumps more than 2× day-over-day (snapshot data event, not real yield).',
+            'APY is capped at ±50%. Anything beyond means inputs are broken; we\u2019d rather show 0% than mislead.',
+            'Honest label: this is "yield + management fees combined." Centrifuge\u2019s indexer doesn\u2019t expose fee accruals separately — we can\u2019t isolate the protocol cut without DefiLlama-style heuristics, so we don\u2019t pretend to.',
+          ]}
+        />
+        <Metric
+          name="Protocol Revenue (DefiLlama)"
+          where="Overview"
+          formula={
+            <>
+              Pulled from{' '}
+              <code>api.llama.fi/summary/fees/centrifuge?dataType=dailyRevenue</code>{' '}
+              with their daily series passed through unchanged.
+            </>
+          }
+          notes={[
+            'This is DefiLlama\u2019s estimate of the fee cut Centrifuge protocol takes (a small fraction of pool yield). Since the Centrifuge indexer has no fee/revenue entity, this is the only available source for protocol-level revenue. Surfaced alongside Pool Yield, never as a substitute.',
+          ]}
+        />
+        <Metric
           name="DEX Volume · Daily Swap Activity"
           where="deSPXA dex subpage"
           formula={
@@ -523,6 +573,33 @@ function KnownQuirks() {
             </>
           }
         />
+        <Quirk
+          label="The Centrifuge indexer has no fee/revenue entity"
+          body={
+            <>
+              Fees aren&apos;t emitted as discrete events in V3 — they&apos;re
+              folded into NAV updates. Our &ldquo;Daily Pool Yield&rdquo;
+              includes management fees and asset-side yield combined; we
+              can&apos;t isolate the protocol cut from official data.
+              DefiLlama&apos;s &ldquo;Centrifuge revenue&rdquo; number is
+              their heuristic estimate; we surface it alongside ours but
+              don&apos;t try to reproduce it.
+            </>
+          }
+        />
+        <Quirk
+          label="Snapshot data bootstraps mid-window"
+          body={
+            <>
+              <code>tokenSnapshot</code> rows are only emitted when something
+              triggers them (a NAV update, a transfer, a fee accrual). Pre-bootstrap
+              days look like $0 NAV in the rollup, even though the pool clearly
+              had supply. Our yield calculation guards against this with a
+              $100M floor and a 2× day-over-day ratio cap — days where NAV
+              &ldquo;appears&rdquo; or doubles aren&apos;t real yield.
+            </>
+          }
+        />
       </div>
     </TuiPanel>
   );
@@ -558,6 +635,13 @@ function Validation() {
           second independent source. We compute both and compare; the gap is
           surfaced as a badge or footnote.
         </p>
+        <ValidationRow
+          metric="Total TVL"
+          primary="Centrifuge indexer + on-chain totalSupply"
+          secondary="DefiLlama protocol TVL"
+          shown="Overview header — VERIFIED vs DEFILLAMA pill, with signed % gap"
+          tolerance="±5%"
+        />
         <ValidationRow
           metric="Token supply (per token)"
           primary="On-chain totalSupply()"
@@ -707,8 +791,8 @@ function NotTracked() {
           <li>
             <strong style={{ color: 'var(--foreground)' }}>Centrifuge V2 pools.</strong>{' '}
             This dashboard tracks V3 only. V2 pools still exist on Ethereum
-            but aren&apos;t indexed by api.centrifuge.io — adding them
-            would require a separate V2 data integration.
+            and contribute to DefiLlama&apos;s broader Centrifuge TVL number,
+            which is part of why our cross-check shows a small positive gap.
           </li>
           <li>
             <strong style={{ color: 'var(--foreground)' }}>Live oracle prices.</strong>{' '}
@@ -784,10 +868,21 @@ function Cadence() {
               <td>Detail pages — same cadence as their list views</td>
             </tr>
             <tr>
+              <td><code>/api/protocol-yield</code></td>
+              <td>1 hour</td>
+              <td>1 hour (capped)</td>
+              <td>Heavy compute (one tokenSnapshots call per pool); yield is a slow-moving figure</td>
+            </tr>
+            <tr>
               <td><code>/api/derwa/[symbol]/swaps</code></td>
               <td>30 min</td>
               <td>4 hours</td>
               <td>~130 chunked eth_getLogs calls on cold cache; we keep stale data usable longer because the cold path is the most expensive</td>
+            </tr>
+            <tr>
+              <td><code>/api/tvl-history</code></td>
+              <td>1 hour</td>
+              <td>DefiLlama updates ~hourly upstream</td>
             </tr>
             <tr>
               <td>Shared on-chain supplies cache</td>

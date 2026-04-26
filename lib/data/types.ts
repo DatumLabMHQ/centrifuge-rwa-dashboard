@@ -378,6 +378,14 @@ export interface OverviewData {
   lastUpdated: string;
 }
 
+/** TVL history payload returned by /api/tvl-history (DefiLlama) */
+export interface TvlHistoryData {
+  totalTvlUsd: number;
+  currentChainTvls: Record<string, number>;
+  series: Array<{ date: string; total: number; byChain: Record<string, number> }>;
+  lastUpdated: string;
+}
+
 /** A row in the Pools table — one row per pool, flattened from GraphQL. */
 export interface PoolRow {
   id: string;
