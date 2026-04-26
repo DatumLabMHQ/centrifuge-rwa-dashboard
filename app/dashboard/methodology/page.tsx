@@ -130,10 +130,10 @@ function DataSources() {
               </td>
               <td>REST · aggregator</td>
               <td>
-                Historical TVL series for cross-validation; protocol fee
-                revenue (no first-party equivalent exists)
+                Historical TVL series for cross-validation against our
+                own number on the Overview page.
               </td>
-              <td>Tier 2 · validation only for TVL</td>
+              <td>Tier 2 · validation only</td>
             </tr>
             <tr>
               <td>
@@ -400,21 +400,7 @@ function PerMetric() {
             'Daily yield is noisy because indexer NAV updates lag investor flows by 1\u20132 days. A $25M flow on day N often shows up in NAV on day N+2, producing a +$25M "yield" on the wrong day that\u2019s offset by a −$25M day later. Smoothing over 7 days absorbs this.',
             'Validity guards: a day is dropped from the calculation if NAV < $100M (history bootstrap) or if NAV jumps more than 2× day-over-day (snapshot data event, not real yield).',
             'APY is capped at ±50%. Anything beyond means inputs are broken; we\u2019d rather show 0% than mislead.',
-            'Honest label: this is "yield + management fees combined." Centrifuge\u2019s indexer doesn\u2019t expose fee accruals separately — we can\u2019t isolate the protocol cut without DefiLlama-style heuristics, so we don\u2019t pretend to.',
-          ]}
-        />
-        <Metric
-          name="Protocol Revenue (DefiLlama)"
-          where="Overview"
-          formula={
-            <>
-              Pulled from{' '}
-              <code>api.llama.fi/summary/fees/centrifuge?dataType=dailyRevenue</code>{' '}
-              with their daily series passed through unchanged.
-            </>
-          }
-          notes={[
-            'This is DefiLlama\u2019s estimate of the fee cut Centrifuge protocol takes (a small fraction of pool yield). Since the Centrifuge indexer has no fee/revenue entity, this is the only available source for protocol-level revenue. Surfaced alongside Pool Yield, never as a substitute.',
+            'Honest label: this is "yield + management fees combined." Centrifuge\u2019s indexer doesn\u2019t expose fee accruals separately, so we don\u2019t try to isolate them.',
           ]}
         />
         <Metric
@@ -579,11 +565,9 @@ function KnownQuirks() {
             <>
               Fees aren&apos;t emitted as discrete events in V3 — they&apos;re
               folded into NAV updates. Our &ldquo;Daily Pool Yield&rdquo;
-              includes management fees and asset-side yield combined; we
-              can&apos;t isolate the protocol cut from official data.
-              DefiLlama&apos;s &ldquo;Centrifuge revenue&rdquo; number is
-              their heuristic estimate; we surface it alongside ours but
-              don&apos;t try to reproduce it.
+              tile reflects the gross of yield plus fees combined; we don&apos;t
+              try to isolate the protocol cut because there&apos;s no
+              first-party data source for it.
             </>
           }
         />

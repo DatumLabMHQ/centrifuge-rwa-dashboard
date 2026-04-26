@@ -30,11 +30,9 @@ import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
 import DataQualityBadge from '@/components/ui/DataQualityBadge';
 import { ChainStack } from '@/components/ui/ChainBadge';
 import type { ProtocolYieldData } from '@/lib/data/protocol-yield';
-import type { DefiLlamaRevenueData } from '@/lib/data/defillama-fees';
 
 interface ProtocolYieldResponse {
   yield: ProtocolYieldData;
-  revenue: DefiLlamaRevenueData | null;
   cached?: boolean;
 }
 
@@ -293,7 +291,7 @@ export default function OverviewPage() {
         </ChartPanel>
       )}
 
-      {/* ─── Protocol economics: Daily Pool Yield + Protocol Revenue ─── */}
+      {/* ─── Protocol economics: Daily Pool Yield ─── */}
       <ProtocolEconomicsSection data={yieldQuery.data} loading={yieldQuery.isLoading} />
 
       {/* ─── Asset class composition (horizontal bars) + Top pools ─── */}
@@ -552,14 +550,11 @@ function AssetClassBars({
 }
 
 /**
- * Protocol economics panel — Daily Pool Yield (Centrifuge GraphQL) +
- * Protocol Revenue (DefiLlama). Two complementary sources, surfaced
- * together so the gap between them is visible (gross pool yield vs. the
- * cut the protocol actually captures).
- *
- * Daily yield is shown as the 7-day rolling sum (smooths NAV-vs-flow
- * timing noise that averages out within a week). Headline APY is
- * computed from that same rolling-7d figure annualized.
+ * Protocol economics panel — Daily Pool Yield, derived from Centrifuge
+ * GraphQL alone (NAV deltas net of investor flows). Shown as a 7-day
+ * rolling sum to absorb the 1-2 day timing gap between NAV updates and
+ * investor transactions. Headline APY is computed from that same
+ * rolling-7d figure annualized.
  */
 function ProtocolEconomicsSection({
   data,
@@ -572,24 +567,13 @@ function ProtocolEconomicsSection({
     return <PanelSkeleton height="h-72" label="Protocol Economics" />;
   }
   const y = data.yield;
-  const r = data.revenue;
   const series = y.series;
 
-  // Combine into a single series for the chart. yield is per-day rolling
-  // (Centrifuge), revenue is per-day from DefiLlama. We left-join on date
-  // so missing revenue days render as 0 rather than dropping.
-  const revenueByDate = new Map<string, number>();
-  if (r) {
-    for (const p of r.series) revenueByDate.set(p.date, p.revenueUsd);
-  }
-  const merged = series.map((p) => ({
+  // Slice to last 90 days to keep the chart readable.
+  const last90 = series.slice(-90).map((p) => ({
     date: p.date,
     rolling7d: p.yieldUsd7dRolling,
-    revenue: revenueByDate.get(p.date) ?? 0,
   }));
-
-  // Slice to last 90 days to keep the chart readable.
-  const last90 = merged.slice(-90);
 
   const apySigned = y.apyPct;
   const apyColor =
@@ -597,8 +581,8 @@ function ProtocolEconomicsSection({
 
   return (
     <div className="space-y-4">
-      {/* Headline metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Headline metrics — three first-party tiles, no DefiLlama revenue. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div
           className="rounded px-4 py-3"
           style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
@@ -635,24 +619,12 @@ function ProtocolEconomicsSection({
             7d-trailing yield, annualized
           </div>
         </div>
-        <div
-          className="rounded px-4 py-3"
-          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-        >
-          <div className="counter-label">Protocol Revenue 30d</div>
-          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>
-            {r?.total30dUsd != null ? formatCurrency(r.total30dUsd) : '—'}
-          </div>
-          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            DefiLlama protocol fee cut
-          </div>
-        </div>
       </div>
 
-      {/* Combined chart */}
+      {/* Pool Yield chart — single series, single axis. */}
       <ChartPanel
-        title="POOL YIELD vs PROTOCOL REVENUE"
-        badge="Centrifuge GraphQL · DefiLlama · last 90d"
+        title="POOL YIELD"
+        badge="Centrifuge GraphQL · last 90d"
         height="h-72"
       >
         <ResponsiveContainer width="100%" height="100%">
@@ -667,15 +639,6 @@ function ProtocolEconomicsSection({
               minTickGap={20}
             />
             <YAxis
-              yAxisId="yield"
-              tick={{ fontSize: 10, fill: '#64748B' }}
-              tickFormatter={(v) => formatCurrency(Number(v))}
-              stroke="#CBD5E1"
-              width={70}
-            />
-            <YAxis
-              yAxisId="rev"
-              orientation="right"
               tick={{ fontSize: 10, fill: '#64748B' }}
               tickFormatter={(v) => formatCurrency(Number(v))}
               stroke="#CBD5E1"
@@ -690,7 +653,6 @@ function ProtocolEconomicsSection({
               wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
             />
             <Area
-              yAxisId="yield"
               type="monotone"
               dataKey="rolling7d"
               name="Pool Yield (7d rolling)"
@@ -698,14 +660,6 @@ function ProtocolEconomicsSection({
               fill="#2563EB"
               fillOpacity={0.18}
               strokeWidth={1.75}
-            />
-            <Bar
-              yAxisId="rev"
-              dataKey="revenue"
-              name="Protocol Revenue (DefiLlama)"
-              fill="#EA580C"
-              fillOpacity={0.85}
-              barSize={4}
             />
           </ComposedChart>
         </ResponsiveContainer>
@@ -716,9 +670,8 @@ function ProtocolEconomicsSection({
         flows, smoothed over a 7-day rolling window to absorb 1–2 day timing
         gaps between NAV updates and investor transactions. Sourced from
         Centrifuge GraphQL. Includes management fees and asset-side yield
-        combined — Centrifuge&apos;s indexer doesn&apos;t expose fee accruals
-        separately. Protocol Revenue is the DefiLlama estimate of fees the
-        Centrifuge protocol captures (a small fraction of pool yield).{' '}
+        combined — Centrifuge&apos;s indexer doesn&apos;t expose fee
+        accruals separately, so we don&apos;t try to isolate them.{' '}
         <Link href="/dashboard/methodology" style={{ color: 'var(--accent-orange)' }}>
           Full methodology →
         </Link>

@@ -1,14 +1,9 @@
 /**
  * GET /api/protocol-yield
  *
- * Returns:
- *   - `yield`: Daily Pool Yield series, derived 100% from Centrifuge GraphQL
- *     (poolSnapshots / tokenSnapshots / investorTransactions). NAV growth
- *     net of investor flows. Honest label: "yield + fees combined."
- *   - `revenue`: DefiLlama's protocol-revenue series, surfaced alongside
- *     for comparison. The gap between yield and revenue ≈ asset-side yield
- *     that flowed to investors instead of the protocol. May be null if the
- *     DefiLlama call fails — the route still returns yield in that case.
+ * Daily Pool Yield series, derived 100% from Centrifuge GraphQL
+ * (poolSnapshots / tokenSnapshots / investorTransactions). NAV growth
+ * net of investor flows. Honest label: "yield + fees combined."
  *
  * Cached for 1 hour (yield doesn't move minute to minute, and the
  * underlying snapshot fetch is heavy: one tokenSnapshots query per pool).
@@ -27,7 +22,6 @@ import {
   type ProtocolYieldData,
   type TokenSnapshotBundle,
 } from '@/lib/data/protocol-yield';
-import { getCentrifugeDailyRevenue, type DefiLlamaRevenueData } from '@/lib/data/defillama-fees';
 
 const CACHE_KEY = 'centrifuge:protocol-yield';
 const DEFAULT_FRESH_TTL_S = 3600; // 1 hour
@@ -41,7 +35,6 @@ function freshTtlS(): number {
 
 interface ResponsePayload {
   yield: ProtocolYieldData;
-  revenue: DefiLlamaRevenueData | null;
 }
 
 export async function GET(request: Request) {
@@ -85,8 +78,7 @@ export async function GET(request: Request) {
           transactions,
           windowDays: days,
         });
-        const revenue = await getCentrifugeDailyRevenue();
-        return { yield: yieldData, revenue };
+        return { yield: yieldData };
       },
     );
 
