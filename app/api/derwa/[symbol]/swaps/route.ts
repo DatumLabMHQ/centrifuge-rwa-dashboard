@@ -34,7 +34,21 @@ export const maxDuration = 300;
 const WRAPPER_SYMBOLS = new Set(['deJTRSY', 'deJAAA', 'deCRDX', 'deSPXA']);
 const DEFAULT_FRESH_TTL_S = 1800; // 30 min — DEX volume changes slowly enough
 const DEFAULT_STALE_TTL_S = 14_400; // 4 hours — keep stale data usable through quiet periods
-const ALLOWED_DAYS = new Set([30, 60, 90, 180]);
+
+/**
+ * Hard cap for the on-chain Swap event scan window.
+ *
+ * Why 30: a 30-day Base scan = ~130 chunked eth_getLogs calls. Even on
+ * Vercel Hobby's 60s function timeout it usually completes. 60+ days
+ * exceeds 60s on cold cache, the function times out before writing to
+ * Redis, and every retry loops forever.
+ *
+ * We accept any value the client asks for but coerce it to MAX_DAYS so
+ * stale browser bundles that still request `?days=90` don't trigger the
+ * timeout-then-loop bug. Old caches still pull, just for a 30-day
+ * window.
+ */
+const MAX_DAYS = 30;
 
 function freshTtlS(): number {
   const raw = process.env.CACHE_TTL_SWAPS;
@@ -86,8 +100,15 @@ export async function GET(
     }
 
     const url = new URL(request.url);
-    const requested = Number(url.searchParams.get('days') ?? '90');
-    const days = ALLOWED_DAYS.has(requested) ? requested : 90;
+    const requested = Number(url.searchParams.get('days') ?? String(MAX_DAYS));
+    // Cap at MAX_DAYS regardless of what the client asks. Browsers with
+    // cached bundles still requesting `?days=90` hit our cap here and
+    // get the 30-day cached result back, sidestepping the cold-path
+    // function timeout that previously froze the chart on stale clients.
+    const days = Math.min(
+      Number.isFinite(requested) && requested > 0 ? requested : MAX_DAYS,
+      MAX_DAYS,
+    );
 
     // Resolve the wrapper's DEX pool from the context registry. This part
     // happens outside SWR because it's pure config lookup, not a fetch.
