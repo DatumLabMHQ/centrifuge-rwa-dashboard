@@ -43,7 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         'Real-time TVL across 9 Centrifuge V3 chains',
         'Pool-by-pool flow of funds (deposits / redemptions)',
         'deRWA composability tracker (deJTRSY, deJAAA, deCRDX, deSPXA)',
-        'DefiLlama cross-source validation',
+        'On-chain Swap event tracking, validated against on-chain reads',
       ]}
     >
       <CentrifugeShell dashboardName={DASHBOARD_NAME} sections={SECTIONS}>

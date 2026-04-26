@@ -183,7 +183,7 @@ export default function CentrifugeShell({
             cache: <span style={{ color: 'var(--green)' }}>healthy</span>
           </span>
           <span className="sep">│</span>
-          <span>sources: Centrifuge GraphQL · DefiLlama · IPFS</span>
+          <span>sources: Centrifuge GraphQL · on-chain RPC · IPFS</span>
         </div>
         <div className="right">
           <span>block #{block.toLocaleString()}</span>
