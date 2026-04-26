@@ -144,7 +144,6 @@ export default function OverviewPage() {
     <div className="space-y-6">
       <PageHeader
         title="Overview"
-        subtitle="Total tokenized RWA on Centrifuge V3 — live across 9 chains."
         right={
           <div className="flex items-center gap-2 flex-wrap">
             {data?.dataQuality && <DataQualityBadge report={data.dataQuality} />}
