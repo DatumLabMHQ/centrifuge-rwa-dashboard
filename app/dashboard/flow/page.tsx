@@ -89,6 +89,29 @@ export default function FlowPage() {
       }
     : { nodes: [], links: [] };
 
+  // Per-pool deposits/redemptions for the detail table. Walk the Sankey
+  // links and bucket by pool node — the aggregator no longer exposes raw
+  // per-pool figures separately, so we reconstruct from the graph.
+  const poolFlows = (() => {
+    if (!data) return [];
+    const vaultIdx = data.nodes.findIndex((n) => n.category === 'vault');
+    const walletIdx = data.nodes.findIndex((n) => n.name === 'Investor Wallet');
+    return data.nodes
+      .map((n, i) => ({ node: n, idx: i }))
+      .filter((p) => p.node.category === 'pool')
+      .map(({ node, idx }) => {
+        const deposits = data.links.find((l) => l.source === vaultIdx && l.target === idx)?.value ?? 0;
+        const redemptions = data.links.find((l) => l.source === idx && l.target === walletIdx)?.value ?? 0;
+        return {
+          name: node.name,
+          deposits,
+          redemptions,
+          net: deposits - redemptions,
+        };
+      })
+      .sort((a, b) => b.deposits + b.redemptions - (a.deposits + a.redemptions));
+  })();
+
   const cross = data?.crossChain;
   // Identify which node indices are sources (first column) vs targets (second
   // column). Source indices are exactly the ones referenced as `link.source`;
@@ -159,7 +182,7 @@ export default function FlowPage() {
         title={view === 'pool' ? 'POOL FLOW' : 'CROSS-CHAIN FLOW'}
         badge={
           view === 'pool'
-            ? `USDC → Vaults → Pools → deRWA · ${range.toLowerCase()}`
+            ? `USDC → Vaults → Pools · ${range.toLowerCase()}`
             : `Wrapper transfers between chains · ${range.toLowerCase()}`
         }
         height="h-[520px]"
@@ -198,20 +221,29 @@ export default function FlowPage() {
                   const node = data.nodes[index];
                   const color = node ? CATEGORY_COLOR[node.category] : '#64748B';
                   const isLeft = x < 200;
+                  // When one pool dwarfs the rest (e.g. JTRSY at $435M of
+                  // $439M deposits) the small pools render as near-zero
+                  // bars and Recharts piles all their labels at the column
+                  // edge. Suppress labels under a readability threshold —
+                  // the detail table below the Sankey carries the per-pool
+                  // breakdown those bars would otherwise communicate.
+                  const showLabel = height >= 10;
                   return (
                     <g>
                       <rect x={x} y={y} width={width} height={height} fill={color} stroke={color} />
-                      <text
-                        x={isLeft ? x + width + 6 : x - 6}
-                        y={y + height / 2}
-                        textAnchor={isLeft ? 'start' : 'end'}
-                        fontSize={11}
-                        fill="#0F172A"
-                        dominantBaseline="middle"
-                        fontWeight={600}
-                      >
-                        {payload.name}
-                      </text>
+                      {showLabel && (
+                        <text
+                          x={isLeft ? x + width + 6 : x - 6}
+                          y={y + height / 2}
+                          textAnchor={isLeft ? 'start' : 'end'}
+                          fontSize={11}
+                          fill="#0F172A"
+                          dominantBaseline="middle"
+                          fontWeight={600}
+                        >
+                          {payload.name}
+                        </text>
+                      )}
                     </g>
                   );
                 }}
@@ -283,6 +315,65 @@ export default function FlowPage() {
           <EmptyChart message={`No cross-chain transfers in the last ${range.toLowerCase()}.`} />
         )}
       </ChartPanel>
+
+      {/* ─── Per-pool detail table — only when pool view is active ───
+           When one pool dominates (currently JTRSY at ~99% of deposits)
+           the Sankey crushes everyone else into illegible threads. The
+           table gives equal pixel-height per row so smaller pools stay
+           readable without distorting the Sankey's proportions. */}
+      {view === 'pool' && poolFlows.length > 0 && (
+        <TuiPanel
+          title="POOL FLOW DETAIL"
+          badge={`${poolFlows.length} pools with activity in ${range.toLowerCase()}`}
+          noPadding
+        >
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Pool</th>
+                  <th className="text-right">Deposits</th>
+                  <th className="text-right">Redemptions</th>
+                  <th className="text-right">Net</th>
+                  <th className="text-right">% of Total Deposits</th>
+                </tr>
+              </thead>
+              <tbody>
+                {poolFlows.map((p) => {
+                  const pct =
+                    data && data.totalDepositsUsd > 0
+                      ? (p.deposits / data.totalDepositsUsd) * 100
+                      : 0;
+                  const netClr =
+                    p.net > 0
+                      ? 'var(--accent-green)'
+                      : p.net < 0
+                      ? 'var(--accent-red)'
+                      : 'var(--text-muted)';
+                  return (
+                    <tr key={p.name}>
+                      <td style={{ fontWeight: 700 }}>{p.name}</td>
+                      <td className="text-right num-positive">
+                        {p.deposits > 0 ? `+${formatCurrency(p.deposits)}` : '—'}
+                      </td>
+                      <td className="text-right num-negative">
+                        {p.redemptions > 0 ? `−${formatCurrency(p.redemptions)}` : '—'}
+                      </td>
+                      <td className="text-right" style={{ color: netClr, fontWeight: 700 }}>
+                        {p.net > 0 ? '+' : p.net < 0 ? '−' : ''}
+                        {formatCurrency(Math.abs(p.net))}
+                      </td>
+                      <td className="text-right" style={{ color: 'var(--accent-orange)', fontWeight: 600 }}>
+                        {pct.toFixed(2)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </TuiPanel>
+      )}
 
       {/* ─── Cross-chain pair table — only when that view is active ─── */}
       {view === 'crosschain' && cross && cross.links.length > 0 && (
