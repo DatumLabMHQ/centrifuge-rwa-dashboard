@@ -13,7 +13,6 @@ const SECTIONS = [
       { href: '/dashboard/pools', label: 'Pools', icon: '▦' },
       { href: '/dashboard/flow', label: 'Flow of Funds', icon: '≈' },
       { href: '/dashboard/derwa', label: 'deRWA', icon: '◈' },
-      { href: '/dashboard/investors', label: 'Investors', icon: '§' },
     ],
   },
   {

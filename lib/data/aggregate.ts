@@ -12,8 +12,6 @@ import {
   type FlowData,
   type FlowLink,
   type FlowNode,
-  type HolderRow,
-  type InvestorsData,
   type InvestorTransaction,
   type OverviewData,
   type Pool,
@@ -547,43 +545,6 @@ export function aggregateFlow(
     totalRedemptionsUsd: totalRedemptions,
     txCount,
     windowDays,
-    lastUpdated: new Date().toISOString(),
-  };
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Investors page aggregator
- *
- * Each TokenInstancePosition is one (account, chain, token) row. We sort by
- * USD value descending to get the top holders globally.
- * ────────────────────────────────────────────────────────────────────────── */
-
-export function aggregateInvestors(positions: TokenInstancePosition[]): InvestorsData {
-  const rows: HolderRow[] = positions
-    .map((p) => {
-      const token = p.tokenInstance.token;
-      const shares = bn(p.balance, token.decimals);
-      const tokenPriceUsd = priceUsd(token.tokenPrice);
-      return {
-        account: p.accountAddress,
-        poolId: token.pool.id,
-        poolName: token.pool.name ?? token.symbol,
-        symbol: token.symbol,
-        chain: p.tokenInstance.blockchain.name,
-        shares,
-        tokenPriceUsd,
-        valueUsd: shares * tokenPriceUsd,
-      };
-    })
-    .filter((r) => r.shares > 0)
-    .sort((a, b) => b.valueUsd - a.valueUsd);
-
-  const accounts = new Set(rows.map((r) => r.account));
-
-  return {
-    topHolders: rows.slice(0, 100),
-    totalUniqueAccounts: accounts.size,
-    totalPositions: rows.length,
     lastUpdated: new Date().toISOString(),
   };
 }

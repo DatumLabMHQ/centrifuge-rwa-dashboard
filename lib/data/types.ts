@@ -430,25 +430,6 @@ export interface PoolsData {
   lastUpdated: string;
 }
 
-/** A holder row on the Investors page. */
-export interface HolderRow {
-  account: string;
-  poolId: string;
-  poolName: string;
-  symbol: string;
-  chain: string;
-  shares: number;
-  tokenPriceUsd: number;
-  valueUsd: number;
-}
-
-export interface InvestorsData {
-  topHolders: HolderRow[];
-  totalUniqueAccounts: number;
-  totalPositions: number;
-  lastUpdated: string;
-}
-
 /** A node/link in the flow-of-funds Sankey diagram. */
 export interface FlowNode {
   name: string;
