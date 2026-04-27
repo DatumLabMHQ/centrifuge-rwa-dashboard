@@ -36,16 +36,7 @@ async function fetchDerwa(days: number): Promise<DerwaData> {
   return res.json();
 }
 
-type SortKey = 'tvlUsd' | 'wrapRatio' | 'holderCount' | 'flowUsd' | 'apy30d';
-
-/**
- * Resolve the 30d APY for sort comparisons. We treat null (no NAV history
- * yet) as -Infinity so those rows sort below numeric values rather than
- * mixing into the middle.
- */
-function apyFor(w: DerwaWrapperRow): number {
-  return w.apy30d ?? Number.NEGATIVE_INFINITY;
-}
+type SortKey = 'tvlUsd' | 'wrapRatio' | 'holderCount' | 'flowUsd';
 
 export default function DerwaPage() {
   const router = useRouter();
@@ -63,13 +54,9 @@ export default function DerwaPage() {
   // Must run before any early returns so hook order stays stable across renders.
   const wrappers = useMemo(() => {
     const list = data?.wrappers ?? [];
-    const valueOf = (w: DerwaWrapperRow): number => {
-      if (sortKey === 'apy30d') return apyFor(w);
-      return (w[sortKey] ?? 0) as number;
-    };
     const sorted = [...list].sort((a, b) => {
-      const av = valueOf(a);
-      const bv = valueOf(b);
+      const av = (a[sortKey] ?? 0) as number;
+      const bv = (b[sortKey] ?? 0) as number;
       return sortDir === 'desc' ? bv - av : av - bv;
     });
     return sorted;
@@ -172,14 +159,6 @@ export default function DerwaPage() {
                     onClick={() => setSort('flowUsd')}
                   >
                     {range} Flow{arrow('flowUsd')}
-                  </th>
-                  <th
-                    className="text-right"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => setSort('apy30d')}
-                    title="30-day NAV-based APY, sourced from Centrifuge's TokenSnapshot.yield30dComp365 field. Same source the official Centrifuge deRWA dashboard uses. For equity index wrappers (e.g. deSPXA) this reflects price volatility annualised, not income yield."
-                  >
-                    APY (30d){arrow('apy30d')}
                   </th>
                   <th className="text-right">DEX Vol 24h</th>
                   <th className="text-right">Premium</th>
@@ -316,9 +295,6 @@ function ComparisonRow({
         {w.flowUsd === 0 ? '—' : formatCurrencySigned(w.flowUsd)}
       </td>
       <td className="text-right">
-        <ApyCell apy={w.apy30d} symbol={w.symbol} />
-      </td>
-      <td className="text-right">
         {w.dex ? (
           w.dex.volume1dUsd != null ? formatCurrency(w.dex.volume1dUsd) : '—'
         ) : (
@@ -366,48 +342,6 @@ function IntegrationsCell({ symbol }: { symbol: string }) {
       size={22}
       max={4}
     />
-  );
-}
-
-/**
- * 30-day APY cell. Renders the NAV-based annualised yield from
- * Centrifuge's TokenSnapshot indexer field. Same source their official
- * deRWA dashboard uses.
- *
- * Equity-index wrappers (currently deSPXA only) get a "price-based"
- * annotation since NAV growth on an S&P 500 fund reflects market
- * volatility rather than income yield. For fixed-income wrappers
- * (deJTRSY, deJAAA, deCRDX) the number IS yield in the conventional
- * sense.
- */
-function ApyCell({ apy, symbol }: { apy: number | null; symbol: string }) {
-  if (apy == null) {
-    return <span style={{ color: 'var(--text-muted)' }}>—</span>;
-  }
-  const pct = apy * 100;
-  // Equity-index wrappers — NAV-based APY is volatile and not yield in
-  // the income sense. Centrifuge's UI suppresses these to 0%; we render
-  // the raw computed value with a disclaimer instead.
-  const isEquityIndex = symbol === 'deSPXA';
-  const tone =
-    pct >= 0
-      ? 'num-positive'
-      : 'num-negative';
-  return (
-    <div className="flex flex-col items-end" style={{ lineHeight: 1.2 }}>
-      <span
-        style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
-        className={tone}
-      >
-        {pct >= 0 ? '+' : ''}
-        {pct.toFixed(2)}%
-      </span>
-      {isEquityIndex && (
-        <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>
-          NAV-based, price volatility
-        </span>
-      )}
-    </div>
   );
 }
 
