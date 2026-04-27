@@ -148,8 +148,8 @@ function DataSources() {
               </td>
               <td>REST · aggregator</td>
               <td>
-                Daily OHLCV per DEX pool — used to validate the on-chain
-                Swap event scan, never as the primary source
+                Live trade price per DEX pool — used for the
+                premium/discount calculation on wrapper detail pages.
               </td>
               <td>Tier 2 · validation only</td>
             </tr>
@@ -222,7 +222,7 @@ function ArchitectureTiers() {
           body={
             <>
               For metrics where we have both Tier 1 and Tier 2 sources (token
-              supply, DEX volume), we compute both and compare. The result is
+              supply), we compute both and compare. The result is
               a per-metric data-quality entry that the page-level aggregators
               also consult to choose which source to display:
               <br />
@@ -398,8 +398,7 @@ function PerMetric() {
           }
           notes={[
             'Decoded fields: amount0 sign indicates direction (positive = USDC into pool = user bought deSPXA; negative = USDC out = user sold deSPXA). We surface both as separate columns so the chart can show buy/sell pressure.',
-            'Cross-validated against GeckoTerminal\u2019s OHLCV endpoint over the overlapping window. The VERIFIED / MINOR DRIFT / MAJOR DRIFT badge in the chart header reflects the divergence: ≤5% = VERIFIED, ≤15% = MINOR, beyond = MAJOR.',
-            'Free-tier RPC chunks fail at ~10% rate, which produces a small undercount vs GeckoTerminal. With a paid RPC the gap closes further.',
+            'Free-tier RPC chunks fail at ~10% rate, which produces a small undercount on cold cache. With a paid RPC override (BASE_RPC_URL env var) the gap closes.',
           ]}
         />
         <Metric
@@ -534,8 +533,7 @@ function KnownQuirks() {
               RPCs throttle aggressively in this regime. With retries, we see
               5–15% chunk failure rate on Base&apos;s free drpc.org endpoint.
               The reader tracks failed chunks separately so the UI can show a
-              &ldquo;coverage&rdquo; indicator. The cross-source validation (vs
-              GeckoTerminal) catches when this materially affects volume.
+              &ldquo;coverage&rdquo; indicator on the swap activity panel.
               Production deployments should use a paid RPC; the env-var
               override is documented in <code>lib/data/onchain/rpc.ts</code>.
             </>
@@ -589,13 +587,6 @@ function Validation() {
           secondary="Centrifuge indexer totalIssuance"
           shown="Per-token data-quality badge in the page header (ok / degraded / broken)"
           tolerance="≤1% = ok; sources differ → uses on-chain authoritative"
-        />
-        <ValidationRow
-          metric="DEX volume"
-          primary="On-chain Swap event aggregation"
-          secondary="GeckoTerminal OHLCV"
-          shown="Chart header on dex subpage — VERIFIED / MINOR DRIFT / MAJOR DRIFT badge"
-          tolerance="≤5% = ok; ≤15% = minor; beyond = major"
         />
       </div>
     </TuiPanel>

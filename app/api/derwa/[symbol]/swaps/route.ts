@@ -14,12 +14,6 @@ import { NextResponse } from 'next/server';
 import { swr } from '@/lib/sdk/kv-cache';
 import { getDerwaContext } from '@/lib/data/derwa-context';
 import { scanPoolSwaps, type SwapsSnapshot } from '@/lib/data/onchain/swap-events';
-import {
-  getPoolOhlcv,
-  reconcileVolumes,
-  type GeckoOhlcvSnapshot,
-  type VolumeReconciliation,
-} from '@/lib/data/geckoterminal-ohlcv';
 import { batchEthCall } from '@/lib/data/onchain/rpc';
 
 /**
@@ -62,8 +56,6 @@ interface ResponsePayload {
   network: string;
   windowDays: number;
   onchain: SwapsSnapshot | null;
-  gecko: GeckoOhlcvSnapshot | null;
-  reconciliation: VolumeReconciliation | null;
 }
 
 /**
@@ -135,30 +127,22 @@ export async function GET(
         if (!tokens) {
           throw new Error('Failed to read pool token0/token1 from RPC');
         }
-        // Run on-chain scan and GeckoTerminal fetch in parallel.
-        const [onchain, gecko] = await Promise.all([
-          scanPoolSwaps({
-            network,
-            pool,
-            token0: tokens.token0,
-            token1: tokens.token1,
-            lookbackDays: days,
-          }).catch((err) => {
-            console.warn('[api/swaps] on-chain scan failed', err);
-            return null;
-          }),
-          getPoolOhlcv(network, pool, days),
-        ]);
-        const reconciliation =
-          onchain && gecko ? reconcileVolumes(onchain.series, gecko.series) : null;
+        const onchain = await scanPoolSwaps({
+          network,
+          pool,
+          token0: tokens.token0,
+          token1: tokens.token1,
+          lookbackDays: days,
+        }).catch((err) => {
+          console.warn('[api/swaps] on-chain scan failed', err);
+          return null;
+        });
         return {
           symbol,
           pool,
           network,
           windowDays: days,
           onchain,
-          gecko,
-          reconciliation,
         };
       },
     );
