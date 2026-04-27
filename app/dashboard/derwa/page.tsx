@@ -36,7 +36,17 @@ async function fetchDerwa(days: number): Promise<DerwaData> {
   return res.json();
 }
 
-type SortKey = 'tvlUsd' | 'wrapRatio' | 'holderCount' | 'flowUsd';
+type SortKey = 'tvlUsd' | 'wrapRatio' | 'holderCount' | 'flowUsd' | 'dexApy';
+
+/**
+ * Resolve the DEX APY value for sort comparisons. The API returns null for
+ * wrappers that don't have a DefiLlama-tracked pool (currently every
+ * wrapper except deSPXA), and we want those to sort below ones with
+ * positive yield rather than between negative values.
+ */
+function dexApyFor(w: DerwaWrapperRow): number {
+  return w.dex?.apy ?? -1;
+}
 
 export default function DerwaPage() {
   const router = useRouter();
@@ -54,9 +64,13 @@ export default function DerwaPage() {
   // Must run before any early returns so hook order stays stable across renders.
   const wrappers = useMemo(() => {
     const list = data?.wrappers ?? [];
+    const valueOf = (w: DerwaWrapperRow): number => {
+      if (sortKey === 'dexApy') return dexApyFor(w);
+      return (w[sortKey] ?? 0) as number;
+    };
     const sorted = [...list].sort((a, b) => {
-      const av = (a[sortKey] ?? 0) as number;
-      const bv = (b[sortKey] ?? 0) as number;
+      const av = valueOf(a);
+      const bv = valueOf(b);
       return sortDir === 'desc' ? bv - av : av - bv;
     });
     return sorted;
@@ -159,6 +173,14 @@ export default function DerwaPage() {
                     onClick={() => setSort('flowUsd')}
                   >
                     {range} Flow{arrow('flowUsd')}
+                  </th>
+                  <th
+                    className="text-right"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setSort('dexApy')}
+                    title="Annualised yield from the wrapper's DEX pool. Comes from DefiLlama; may include LP token emissions, not just swap-fee yield."
+                  >
+                    DEX APY{arrow('dexApy')}
                   </th>
                   <th className="text-right">DEX Vol 24h</th>
                   <th className="text-right">Premium</th>
@@ -295,6 +317,9 @@ function ComparisonRow({
         {w.flowUsd === 0 ? '—' : formatCurrencySigned(w.flowUsd)}
       </td>
       <td className="text-right">
+        <DexApyCell dex={w.dex} />
+      </td>
+      <td className="text-right">
         {w.dex ? (
           w.dex.volume1dUsd != null ? formatCurrency(w.dex.volume1dUsd) : '—'
         ) : (
@@ -342,6 +367,39 @@ function IntegrationsCell({ symbol }: { symbol: string }) {
       size={22}
       max={4}
     />
+  );
+}
+
+/**
+ * DEX APY cell. Renders the headline APY figure plus a small disclosure
+ * line when the yield is dominated by LP token emissions rather than
+ * swap fees, so readers don't read the number as risk-free organic yield.
+ *
+ * Falls back to "—" for wrappers that don't have a DefiLlama-tracked
+ * pool yet (deJTRSY, deJAAA — Aerodrome listed but no DefiLlama pool ID;
+ * deCRDX — Aerodrome integration is announced not live).
+ */
+function DexApyCell({ dex }: { dex: DerwaWrapperRow['dex'] }) {
+  if (!dex || dex.apy == null) {
+    return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+  }
+  // "Mostly emissions" when reward APY is at least 80% of total APY.
+  // Threshold rather than equality because DefiLlama's apyBase can be
+  // null (treated as 0) or a tiny non-zero number even on emission-led
+  // pools.
+  const reward = dex.apyReward ?? 0;
+  const dominantlyEmissions = dex.apy > 0 && reward / dex.apy > 0.8;
+  return (
+    <div className="flex flex-col items-end" style={{ lineHeight: 1.2 }}>
+      <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} className="num-positive">
+        {dex.apy.toFixed(2)}%
+      </span>
+      {dominantlyEmissions && (
+        <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>
+          mostly LP emissions
+        </span>
+      )}
+    </div>
   );
 }
 
