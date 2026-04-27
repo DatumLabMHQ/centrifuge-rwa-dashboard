@@ -100,7 +100,27 @@ export default function DexSubPage() {
           {/* Metrics */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricTile label="Pool TVL" value={formatCurrency(dex.tvlUsd)} sub="Total value locked" />
-            <MetricTile label="Total APY" value={`${dex.apy.toFixed(2)}%`} color="green" sub="Combined yield" />
+            <MetricTile
+              label="Total APY"
+              value={`${dex.apy.toFixed(2)}%`}
+              color="green"
+              sub={
+                // Surface the AERO-emissions split inline. Almost all of the
+                // APY on this Slipstream pool comes from Aerodrome token
+                // incentives, not organic swap fees, so calling it out on
+                // the tile prevents readers from reading the headline rate
+                // as pure-yield. The full numeric breakdown was previously
+                // in a dedicated "APY BREAKDOWN" panel; that panel was
+                // redundant with the tile so it was removed.
+                dex.apyReward != null && dex.apy > 0
+                  ? `${dex.apyReward.toFixed(2)}% from AERO emissions${
+                      dex.apyBase != null
+                        ? ` · ${dex.apyBase.toFixed(2)}% from swap fees`
+                        : ''
+                    }`
+                  : 'Combined yield'
+              }
+            />
             <MetricTile
               label="24h Volume"
               value={(() => {
@@ -128,74 +148,6 @@ export default function DexSubPage() {
               color={dex.premiumPct != null ? (dex.premiumPct > 0 ? 'green' : 'red') : undefined}
             />
           </div>
-
-          {/* APY breakdown */}
-          <TuiPanel title="APY BREAKDOWN" badge="Where the yield comes from">
-            <div className="px-4 pb-4 pt-2 space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <div className="counter-label">Total APY</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-green)' }}>
-                    {dex.apy.toFixed(2)}%
-                  </div>
-                </div>
-                <div>
-                  <div className="counter-label">Base (Trading Fees)</div>
-                  <div style={{ fontSize: 24, fontWeight: 700 }}>
-                    {dex.apyBase != null ? `${dex.apyBase.toFixed(2)}%` : '—'}
-                  </div>
-                  <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                    Organic yield from swap fees
-                  </div>
-                </div>
-                <div>
-                  <div className="counter-label">Reward (AERO Incentives)</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-blue)' }}>
-                    {dex.apyReward != null ? `${dex.apyReward.toFixed(2)}%` : '—'}
-                  </div>
-                  <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                    Aerodrome token emissions
-                  </div>
-                </div>
-              </div>
-
-              {/* Yield composition bar */}
-              {dex.apyBase != null && dex.apyReward != null && dex.apy > 0 && (
-                <div>
-                  <div className="flex rounded overflow-hidden" style={{ height: 12 }}>
-                    <div
-                      style={{
-                        width: `${(dex.apyBase / dex.apy) * 100}%`,
-                        background: 'var(--foreground)',
-                      }}
-                    />
-                    <div
-                      style={{
-                        width: `${(dex.apyReward / dex.apy) * 100}%`,
-                        background: 'var(--accent-blue)',
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between mt-1 text-[9px]" style={{ color: 'var(--text-muted)' }}>
-                    <span>Trading fees: {((dex.apyBase / dex.apy) * 100).toFixed(1)}%</span>
-                    <span>AERO rewards: {((dex.apyReward / dex.apy) * 100).toFixed(1)}%</span>
-                  </div>
-                </div>
-              )}
-
-              {dex.apyReward != null && dex.apyBase != null && dex.apyReward > dex.apyBase * 5 && (
-                <div
-                  className="rounded p-3 text-[11px]"
-                  style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)' }}
-                >
-                  <strong>Note:</strong> {((dex.apyReward / dex.apy) * 100).toFixed(0)}% of this
-                  APY comes from AERO incentive emissions, not organic trading fees. If Aerodrome
-                  reduces or ends emissions to this pool, the effective yield would drop to
-                  ~{dex.apyBase.toFixed(2)}%.
-                </div>
-              )}
-            </div>
-          </TuiPanel>
 
           {/* Daily Swap Activity — on-chain Swap events */}
           <SwapActivitySection data={swaps.data} loading={swaps.isLoading} error={swaps.isError} />
