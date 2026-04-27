@@ -32,16 +32,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ ...cached, cached: true });
     }
 
-    // Cross-chain transfers come from a separate query (TRANSFER_IN/TRANSFER_OUT
-    // events) and are NOT included in the main pool-flow aggregate.
+    // Cross-chain transfers come from `crosschainPayloads` (the bridge
+    // message entity itself) — NOT the pool-flow investorTransactions. We
+    // fetch up to 5000 to cover busy 30-365 day windows; if we hit the cap
+    // the aggregator flags `hitFetchCap` so the UI shows "X+" instead of a
+    // misleadingly precise count.
+    const CROSS_CHAIN_LIMIT = 5000;
     const [pools, txs, crossChainTxs] = await Promise.all([
       getAllPools(200),
       getRecentFlowTransactions(1000),
-      getRecentCrossChainTransactions(1000),
+      getRecentCrossChainTransactions(CROSS_CHAIN_LIMIT),
     ]);
 
     const flow = aggregateFlow(pools, txs, days);
-    const crossChain = aggregateCrossChainFlow(pools, crossChainTxs, days);
+    const crossChain = aggregateCrossChainFlow(pools, crossChainTxs, days, CROSS_CHAIN_LIMIT);
 
     const data = { ...flow, crossChain };
     globalCache.set(cacheKey, data);

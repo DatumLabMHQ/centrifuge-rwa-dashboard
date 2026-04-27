@@ -516,8 +516,10 @@ export function aggregateFlow(
   });
   links.push({ source: usdcNode, target: vaultNode, value: totalDeposits });
 
-  // Layer 2 — one node per pool with non-zero deposits, with optional wrapper
-  // node for deRWA pools.
+  // Layer 2 — one node per pool with non-zero activity. We previously emitted
+  // a "<symbol> (DeFi)" wrapper node for deRWA pools, but its value was just
+  // a copy of `acc.deposits`, so the link `pool → wrapper` was geometrically
+  // identical to `vault → pool` and added no information. Removed.
   const sortedPools = Array.from(byPool.values())
     .filter((a) => a.deposits + a.redemptions > 0)
     .sort((a, b) => b.deposits + b.redemptions - (a.deposits + a.redemptions));
@@ -532,17 +534,6 @@ export function aggregateFlow(
     if (acc.deposits > 0) {
       links.push({ source: vaultNode, target: poolNode, value: acc.deposits });
     }
-
-    if (isDeRwaPool(acc.token) && acc.deposits > 0) {
-      // Pool → deRWA wrapper layer
-      const wrapNode = idx({
-        name: `${symbol} (DeFi)`,
-        category: 'wrapper',
-        valueUsd: acc.deposits,
-      });
-      links.push({ source: poolNode, target: wrapNode, value: acc.deposits });
-    }
-
     // Redemptions: pool → wallet
     if (acc.redemptions > 0) {
       links.push({ source: poolNode, target: walletNode, value: acc.redemptions });
@@ -600,20 +591,23 @@ export function aggregateInvestors(positions: TokenInstancePosition[]): Investor
 /* ──────────────────────────────────────────────────────────────────────────
  * Cross-chain flow aggregator
  *
- * Builds Sankey nodes/links from TRANSFER_IN / TRANSFER_OUT events. Each
- * transfer has fromCentrifugeId and toCentrifugeId — we group by (from, to)
- * to get net wrapper movement between chains over the window.
+ * Source: Centrifuge V3 `crosschainPayloads` — the bridge-message entity
+ * itself, NOT investorTransactions. Each payload is exactly one outbound
+ * bridge message with `fromBlockchain` and `toBlockchain` distinct, so
+ * there's no double-counting to undo. We group by (from, to) chain pair
+ * and the link "value" is the message count (the entity carries opcode +
+ * tokenId only, no amount, so a USD volume isn't recoverable here).
  *
- * Pairs each transfer with the matching opposite-direction event when
- * possible to deduplicate (every transfer logs both an OUT on the source
- * chain and an IN on the destination). Falls back to TRANSFER_IN events
- * alone if pairing fails so we don't double-count.
+ * `hitFetchCap` is set when the upstream fetch returned exactly the
+ * requested limit, signalling that the true 30-day count may be larger
+ * than what we render. UI should label as "X+" in that case.
  * ────────────────────────────────────────────────────────────────────────── */
 
 export function aggregateCrossChainFlow(
   pools: Pool[],
   payloads: CrossChainTransaction[],
   windowDays = 30,
+  fetchLimit?: number,
 ): CrossChainFlowData {
   const cutoff = Date.now() - windowDays * 24 * 60 * 60 * 1000;
 
@@ -639,12 +633,9 @@ export function aggregateCrossChainFlow(
     addChain(p.toBlockchain?.centrifugeId, p.toBlockchain?.name);
   }
 
-  // Aggregate (fromId, toId) → payload count. We can't get USD value from a
-  // payload alone (it carries opcode + tokenId, no amount), so we use the
-  // number of bridge messages as the link "value" for the Sankey.
-  // We also skip any payload involving an unknown chain (centrifugeId not in
-  // the registered blockchain set) so the Sankey doesn't render "chain-12"
-  // garbage labels.
+  // Aggregate (fromId, toId) → bridge message count. Skip any payload
+  // involving an unknown chain (centrifugeId not in the registered blockchain
+  // set) so the Sankey doesn't render "chain-12" garbage labels.
   const pairCounts = new Map<string, number>();
   let txCount = 0;
 
@@ -660,7 +651,11 @@ export function aggregateCrossChainFlow(
     txCount += 1;
   }
   const pairTotals = pairCounts;
-  const totalVolume = txCount;
+  // Cap is "hit" when the upstream fetch returned exactly the limit. We
+  // can't tell the true 30-day count without paginating; surfacing this
+  // flag lets the UI render "1,000+" instead of a misleadingly precise
+  // number.
+  const hitFetchCap = fetchLimit !== undefined && payloads.length >= fetchLimit;
 
   // Build node list with the "duplicated columns" trick: each chain becomes
   // a left-side "from" node and/or a right-side "to" node ONLY if it actually
@@ -706,8 +701,9 @@ export function aggregateCrossChainFlow(
   return {
     nodes,
     links,
-    totalVolumeUsd: totalVolume,
+    totalMessageCount: txCount,
     txCount,
+    hitFetchCap,
     windowDays,
   };
 }

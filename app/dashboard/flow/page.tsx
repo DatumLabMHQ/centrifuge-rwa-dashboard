@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ResponsiveContainer, Sankey, Tooltip } from 'recharts';
 import {
@@ -11,11 +11,13 @@ import { formatCurrency } from '@/lib/format';
 import type { CrossChainFlowData, FlowData, FlowNode } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
-import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
 import { ChainBadge } from '@/components/ui/ChainBadge';
 
-type FlowResponse = FlowData & { crossChain: CrossChainFlowData };
+type FlowResponse = FlowData & {
+  crossChain: CrossChainFlowData;
+  cached?: boolean;
+};
 
 const RANGE_DAYS: Record<TimeRange, number> = {
   '7D': 7,
@@ -40,6 +42,10 @@ const CHAIN_COLOR: Record<string, string> = {
   plume: '#C8A973',
   binance: '#F0B90B',
   optimism: '#FF0420',
+  // Newer chains the indexer started reporting after V3 multichain launch.
+  monad: '#836EF9',
+  pharos: '#1A8A52',
+  hyperliquid: '#97FCE4',
 };
 
 async function fetchFlow(days: number): Promise<FlowResponse> {
@@ -100,7 +106,14 @@ export default function FlowPage() {
       <PageHeader
         title="Flow of Funds"
         subtitle={`Capital movement across pools and chains over the last ${range.toLowerCase()}`}
-        right={<TimeSlicer value={range} onChange={setRange} />}
+        right={
+          <div className="flex items-center gap-2 flex-wrap">
+            {data?.lastUpdated && (
+              <DataSourceBadge lastUpdated={data.lastUpdated} cached={data.cached} />
+            )}
+            <TimeSlicer value={range} onChange={setRange} />
+          </div>
+        }
       />
 
       {/* ─── Bloomberg-style summary tiles (in-content, not in ticker) ─── */}
@@ -127,9 +140,17 @@ export default function FlowPage() {
           prefix={data ? (netFlow >= 0 ? '+' : '−') : ''}
         />
         <SummaryTile
-          label="Cross-Chain Bridges"
-          value={cross ? cross.txCount.toLocaleString() : '—'}
-          subtitle={cross ? `${cross.links.length} active routes` : 'Loading…'}
+          label="Cross-Chain Transfers"
+          value={
+            cross
+              ? `${cross.txCount.toLocaleString()}${cross.hitFetchCap ? '+' : ''}`
+              : '—'
+          }
+          subtitle={
+            cross
+              ? `${cross.links.length} active routes${cross.hitFetchCap ? ' · capped at fetch limit' : ''}`
+              : 'Loading…'
+          }
         />
       </div>
 
@@ -223,6 +244,10 @@ export default function FlowPage() {
                 const node = cross!.nodes[index];
                 const color = node ? CHAIN_COLOR[node.name] ?? '#64748B' : '#64748B';
                 const isSource = sourceIndices.has(index);
+                // Same chain can appear in both the source column and the
+                // target column — append "(out)" / "(in)" so a reader can
+                // tell at a glance which side they're looking at.
+                const label = `${payload.name} ${isSource ? '(out)' : '(in)'}`;
                 return (
                   <g>
                     <rect x={x} y={y} width={width} height={height} fill={color} stroke={color} />
@@ -236,7 +261,7 @@ export default function FlowPage() {
                       fontWeight={700}
                       style={{ textTransform: 'capitalize' }}
                     >
-                      {payload.name}
+                      {label}
                     </text>
                   </g>
                 );
@@ -250,7 +275,7 @@ export default function FlowPage() {
                   fontSize: 11,
                   boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
                 }}
-                formatter={(v) => `${Number(v).toLocaleString()} bridges`}
+                formatter={(v) => `${Number(v).toLocaleString()} transfers`}
               />
             </Sankey>
           </ResponsiveContainer>
@@ -268,7 +293,7 @@ export default function FlowPage() {
                 <tr>
                   <th>From</th>
                   <th>To</th>
-                  <th className="text-right">Bridge Messages</th>
+                  <th className="text-right">Transfers</th>
                   <th className="text-right">% of Total</th>
                 </tr>
               </thead>
@@ -276,7 +301,10 @@ export default function FlowPage() {
                 {cross.links.slice(0, 10).map((l, i) => {
                   const from = cross.nodes[l.source];
                   const to = cross.nodes[l.target];
-                  const pct = cross.totalVolumeUsd > 0 ? (l.value / cross.totalVolumeUsd) * 100 : 0;
+                  const pct =
+                    cross.totalMessageCount > 0
+                      ? (l.value / cross.totalMessageCount) * 100
+                      : 0;
                   return (
                     <tr key={i}>
                       <td>
@@ -345,5 +373,75 @@ function EmptyChart({ message }: { message: string }) {
     >
       {message}
     </div>
+  );
+}
+
+/**
+ * Tiny "where this data came from + how fresh" pill — the flow page tracks
+ * transactions, not token-supply reconciliation, so the standard
+ * DataQualityBadge (which reports Tier 1 vs Tier 2 supply diffs) doesn't
+ * apply. This is the source-and-freshness equivalent.
+ */
+function DataSourceBadge({
+  lastUpdated,
+  cached,
+}: {
+  lastUpdated: string;
+  cached?: boolean;
+}) {
+  // Date.now() is impure during render (React 19 lint), so compute relative
+  // age in an effect and re-run on a 1-min tick. Tooltip uses absolute time
+  // which IS render-safe.
+  const [ageLabel, setAgeLabel] = useState('—');
+  useEffect(() => {
+    const compute = () => {
+      const ageMin = Math.max(
+        0,
+        Math.round((Date.now() - new Date(lastUpdated).getTime()) / 60000),
+      );
+      setAgeLabel(
+        ageMin < 1
+          ? 'just now'
+          : ageMin < 60
+          ? `${ageMin}m ago`
+          : `${Math.round(ageMin / 60)}h ago`,
+      );
+    };
+    compute();
+    const id = setInterval(compute, 60_000);
+    return () => clearInterval(id);
+  }, [lastUpdated]);
+  return (
+    <span
+      title={`Source: Centrifuge V3 indexer (api.centrifuge.io)\nLast aggregated: ${new Date(lastUpdated).toLocaleString()}${cached ? '\nServed from cache' : '\nFresh fetch'}`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.08em',
+        fontWeight: 600,
+        padding: '3px 8px',
+        borderRadius: 3,
+        background: 'rgba(46, 204, 113, 0.14)',
+        color: 'var(--green)',
+        cursor: 'help',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          background: 'var(--green)',
+          boxShadow: '0 0 0 2px rgba(46,204,113,0.14)',
+        }}
+      />
+      Centrifuge · {ageLabel}
+    </span>
   );
 }

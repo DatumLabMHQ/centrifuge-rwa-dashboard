@@ -317,8 +317,20 @@ export interface CrossChainFlowData {
   nodes: Array<{ name: string; centrifugeId: string }>;
   /** One link per (source chain, target chain) pair with non-zero flow. */
   links: Array<{ source: number; target: number; value: number }>;
-  totalVolumeUsd: number;
+  /**
+   * Total bridge messages in the window. Centrifuge V3's `crosschainPayload`
+   * entity carries opcode + tokenId only — no amount — so this is a count of
+   * bridge events, not a USD-denominated volume.
+   */
+  totalMessageCount: number;
+  /** Same value as totalMessageCount; kept for tile rendering. */
   txCount: number;
+  /**
+   * True when the indexer fetch returned exactly the requested limit, meaning
+   * the actual count over `windowDays` is at-least but possibly larger than
+   * `txCount`. UI should render "X+" rather than a precise number.
+   */
+  hitFetchCap: boolean;
   windowDays: number;
 }
 
