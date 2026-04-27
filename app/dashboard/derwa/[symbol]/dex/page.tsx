@@ -21,7 +21,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
 import { ChainBadge } from '@/components/ui/ChainBadge';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
-import type { AerodromeSwapsSnapshot } from '@/lib/data/aerodrome-subgraph';
+import type { SwapsSnapshot } from '@/lib/data/onchain/swap-events';
 
 async function fetchDetail(symbol: string): Promise<DerwaDetailData> {
   const res = await fetch(`/api/derwa/${symbol}?days=365`);
@@ -34,15 +34,16 @@ interface SwapsResponse {
   pool: string;
   network: string;
   windowDays: number;
-  onchain: AerodromeSwapsSnapshot | null;
+  onchain: SwapsSnapshot | null;
   cached?: boolean;
 }
 
 async function fetchSwaps(symbol: string): Promise<SwapsResponse> {
-  // 90 days now that the subgraph reader replaces the slow on-chain
-  // scan. The Graph returns this in a single GraphQL call (~200ms),
-  // no Vercel function-timeout concerns.
-  const res = await fetch(`/api/derwa/${symbol}/swaps?days=90`);
+  // 30 days is a deliberate balance: fewer chunked eth_getLogs calls than
+  // 90 days, so the cold-path scan fits well under Vercel's serverless
+  // timeout. The chart still shows ~25 days of recent activity which is
+  // plenty to read a trend.
+  const res = await fetch(`/api/derwa/${symbol}/swaps?days=30`);
   if (!res.ok) throw new Error('Failed to load swap activity');
   return res.json();
 }
@@ -271,20 +272,21 @@ function SwapActivitySection({
     return (
       <TuiPanel title="DAILY SWAP ACTIVITY">
         <div className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-          No swap activity returned by the Aerodrome subgraph for this pool yet.
+          On-chain scan returned no Swap events for this pool yet.
         </div>
       </TuiPanel>
     );
   }
 
-  // Daily series from the subgraph.
+  // Single-source dataset.
   const merged = oc.series.map((d) => ({
     date: d.date,
     onchainVol: d.volumeUsd,
     txCount: d.txCount,
+    uniqueTraders: d.uniqueTraders,
   }));
 
-  // Headline summary stats over the window.
+  // Headline summary stats from the on-chain series — the authoritative numbers.
   const totals = oc.series.reduce(
     (acc, d) => {
       acc.vol += d.volumeUsd;
@@ -293,30 +295,44 @@ function SwapActivitySection({
     },
     { vol: 0, tx: 0 },
   );
-
-  // Pick the busiest day for an "activity high" tile.
-  const peakDay = oc.series.reduce(
-    (m, d) => (d.volumeUsd > m.volumeUsd ? d : m),
-    oc.series[0] ?? { date: '', volumeUsd: 0, txCount: 0 },
-  );
+  const allTraders = new Set<string>();
+  for (const d of oc.series) {
+    // Note: SwapDay carries a count, not the actual address set. We use the
+    // sum of distinct counts as an upper bound for "active wallets" in the
+    // headline, even though it double-counts wallets that traded multiple days.
+    void d;
+  }
+  // Instead of estimating, count peak day's distinct traders as a proxy.
+  const peakDayTraders = oc.series.reduce((m, d) => Math.max(m, d.uniqueTraders), 0);
+  void allTraders;
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <MetricTile
           label={`Volume (${data.windowDays}d)`}
           value={formatCurrency(totals.vol)}
-          sub="Aerodrome subgraph"
+          sub="On-chain Swap events"
         />
         <MetricTile
           label={`Trades (${data.windowDays}d)`}
           value={totals.tx.toLocaleString()}
-          sub="Indexed Swap events"
+          sub="Decoded from pool logs"
         />
         <MetricTile
-          label="Busiest Day"
-          value={formatCurrency(peakDay.volumeUsd)}
-          sub={peakDay.date || '—'}
+          label="Peak Day Traders"
+          value={peakDayTraders.toLocaleString()}
+          sub="Distinct recipients in busiest day"
+        />
+        <MetricTile
+          label="Coverage"
+          value={
+            oc.scannedChunks > 0
+              ? `${Math.round(((oc.scannedChunks - oc.failedChunks) / oc.scannedChunks) * 100)}%`
+              : '—'
+          }
+          sub={`${oc.scannedChunks} chunks · ${oc.failedChunks} failed`}
+          color={oc.failedChunks === 0 ? 'green' : oc.failedChunks > oc.scannedChunks * 0.2 ? 'red' : undefined}
         />
       </div>
 
@@ -378,10 +394,9 @@ function SwapActivitySection({
       </ChartPanel>
 
       <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-        <strong>Methodology.</strong> Daily volume + tx count for pool{' '}
-        <code>{formatAddress(data.pool)}</code> over the last{' '}
-        {data.windowDays} days, sourced from the Aerodrome Base Full
-        subgraph on The Graph Network.{' '}
+        <strong>Methodology.</strong> Volume bars = USDC side of every{' '}
+        <code>Swap</code> event from pool <code>{formatAddress(data.pool)}</code> over the
+        last {data.windowDays} days, decoded from raw transaction logs via Base RPC.{' '}
         <Link href="/dashboard/methodology" style={{ color: 'var(--accent-orange)' }}>
           Full methodology →
         </Link>
