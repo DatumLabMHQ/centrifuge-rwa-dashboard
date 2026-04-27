@@ -261,7 +261,13 @@ function SwapActivitySection({
   error: boolean;
 }) {
   if (loading) {
-    return <PanelSkeleton height="h-72" label="Daily Swap Activity" />;
+    return (
+      <PanelSkeleton
+        height="h-72"
+        label="Daily Swap Activity"
+        description="Scanning ~130 chunks of Base eth_getLogs · ~5-10s on cold cache, instant on cache hit"
+      />
+    );
   }
   if (error || !data) {
     return null;

@@ -20,6 +20,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ReferenceLine,
@@ -58,6 +59,26 @@ const TOOLTIP_STYLE = {
   borderRadius: 4,
   fontSize: 11,
   boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+};
+
+/**
+ * Compact legend pinned to the top-right of each chart. Uses small text and
+ * a thin line icon so it doesn't compete with the chart for visual weight.
+ * The trade-off is `margin.top: 24` on the parent chart so the lines aren't
+ * obscured by the legend strip.
+ */
+const LEGEND_PROPS = {
+  verticalAlign: 'top' as const,
+  align: 'right' as const,
+  height: 20,
+  iconType: 'plainline' as const,
+  iconSize: 14,
+  wrapperStyle: {
+    fontSize: 10,
+    fontWeight: 600,
+    color: '#475569',
+    paddingBottom: 4,
+  },
 };
 
 export default function MorphoSubPage() {
@@ -128,7 +149,7 @@ export default function MorphoSubPage() {
             {m.irmCurve.length > 0 && (
               <ChartPanel title="INTEREST RATE MODEL" badge="Rates vs utilization" height="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={m.irmCurve} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <LineChart data={m.irmCurve} margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis
                       dataKey="utilization"
@@ -149,6 +170,7 @@ export default function MorphoSubPage() {
                       labelFormatter={(v) => `Utilization: ${(Number(v) * 100).toFixed(0)}%`}
                       labelStyle={{ fontWeight: 700 }}
                     />
+                    <Legend {...LEGEND_PROPS} />
                     <ReferenceLine
                       x={m.utilization}
                       stroke="var(--accent-orange)"
@@ -164,13 +186,14 @@ export default function MorphoSubPage() {
             )}
 
             {m.historicalSupplyApy.length > 2 && (
-              <ChartPanel title="APY HISTORY" badge="Supply (green) vs Borrow (red)" height="h-64">
+              <ChartPanel title="APY HISTORY" badge="Lender vs borrower rates over time" height="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <LineChart margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
                     <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} stroke="#CBD5E1" width={48} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`} />
+                    <Legend {...LEGEND_PROPS} />
                     <Line data={m.historicalSupplyApy} type="monotone" dataKey="y" name="Supply APY" stroke="#16A34A" strokeWidth={1.5} dot={false} />
                     <Line data={m.historicalBorrowApy} type="monotone" dataKey="y" name="Borrow APY" stroke="#DC2626" strokeWidth={1.5} dot={false} />
                   </LineChart>
@@ -184,7 +207,7 @@ export default function MorphoSubPage() {
             {m.historicalSupplyUsd.length > 2 && (
               <ChartPanel title="SUPPLY & BORROW" badge={`${m.historicalSupplyUsd.length} data points`} height="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <AreaChart margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradSupply" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#16A34A" stopOpacity={0.2} />
@@ -199,6 +222,7 @@ export default function MorphoSubPage() {
                     <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
                     <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => formatCurrency(v)} stroke="#CBD5E1" width={60} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => formatCurrency(Number(v))} />
+                    <Legend {...LEGEND_PROPS} iconType="square" />
                     <Area data={m.historicalSupplyUsd} type="monotone" dataKey="y" name="Supply" stroke="#16A34A" fill="url(#gradSupply)" strokeWidth={1.5} />
                     <Area data={m.historicalBorrowUsd} type="monotone" dataKey="y" name="Borrow" stroke="#DC2626" fill="url(#gradBorrow)" strokeWidth={1.5} />
                   </AreaChart>
@@ -220,7 +244,10 @@ export default function MorphoSubPage() {
                     <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} />
                     <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} stroke="#CBD5E1" width={45} domain={[0, 1]} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => `${(Number(v) * 100).toFixed(1)}%`} />
-                    <ReferenceLine y={0.9} stroke="var(--accent-red)" strokeDasharray="4 4" label={{ value: '90%', position: 'right', fontSize: 9, fill: '#DC2626' }} />
+                    {/* `position: 'right'` placed the label outside the plot
+                         area where it was clipped to a stray "9". `insideTopRight`
+                         keeps the full "90%" inside the chart. */}
+                    <ReferenceLine y={0.9} stroke="var(--accent-red)" strokeDasharray="4 4" label={{ value: '90% danger', position: 'insideTopRight', fontSize: 9, fill: '#DC2626', fontWeight: 700 }} />
                     <Area type="monotone" dataKey="y" name="Utilization" stroke="#EA580C" fill="url(#gradUtil)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>

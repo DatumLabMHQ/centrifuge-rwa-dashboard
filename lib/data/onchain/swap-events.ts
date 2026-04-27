@@ -87,7 +87,18 @@ export interface ScanSwapsOpts {
   blockTimeSec?: number;
   /** Chunk size for eth_getLogs. Default 9999 (under the typical 10k cap). */
   chunkSize?: number;
-  /** Max concurrent log requests. Default 2 (free-tier RPC friendly). */
+  /**
+   * Max concurrent eth_getLogs requests.
+   *
+   * Default 8 — calibrated for our paid Alchemy tier on Base. With 130
+   * chunks for a 30-day window, concurrency=8 finishes in ~5-7s; the
+   * previous default of 2 was free-tier-friendly but caused 20-30s
+   * cold-cache loads that pushed against Vercel's 60s function timeout.
+   *
+   * Lower this if BASE_RPC_URL points at a public/free RPC (drpc.org,
+   * 1rpc.io) that throttles; higher won't help (Alchemy doesn't penalize
+   * higher parallelism for batched JSON-RPC).
+   */
   concurrency?: number;
 }
 
@@ -198,7 +209,7 @@ export async function scanPoolSwaps(opts: ScanSwapsOpts): Promise<SwapsSnapshot 
     lookbackDays = 90,
     blockTimeSec = 2,
     chunkSize = 9999,
-    concurrency = 2,
+    concurrency = 8,
   } = opts;
 
   const latest = await getLatestBlock(network);

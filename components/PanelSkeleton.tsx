@@ -12,17 +12,38 @@ interface PanelSkeletonProps {
   height?: string;
   /** Optional label to render at the top of the skeleton. */
   label?: string;
+  /**
+   * Optional context line shown inside the skeleton. Use for slow loads
+   * where a generic "fetching…" badge undersells the work — e.g.
+   * `"On-chain Swap event scan · ~10s on cold cache"` so the user knows
+   * the wait is real work, not a hung request.
+   */
+  description?: string;
 }
 
-export function PanelSkeleton({ height = 'h-72', label }: PanelSkeletonProps) {
+export function PanelSkeleton({
+  height = 'h-72',
+  label,
+  description,
+}: PanelSkeletonProps) {
   return (
     <div className="tui-panel">
       <div className="tui-panel-header">
         <span className="tui-panel-title">{label ?? 'Loading'}</span>
         <span className="tui-panel-badge">fetching…</span>
       </div>
-      <div className={`p-4 ${height}`}>
+      <div className={`p-4 ${height} relative`}>
         <div className="h-full w-full skeleton rounded" />
+        {description && (
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <span className="text-[11px] font-mono px-3 py-1.5 rounded bg-white/80 border" style={{ borderColor: 'var(--border)' }}>
+              {description}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
