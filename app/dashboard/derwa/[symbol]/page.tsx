@@ -109,7 +109,11 @@ export default function DerwaDetailPage() {
         <HeroTile
           label="Wrap Ratio"
           value={w?.wrapRatio != null ? `${(w.wrapRatio * 100).toFixed(1)}%` : '—'}
-          sub={w?.instTvlUsd != null ? `of ${formatCurrency(w.instTvlUsd)} ${w.instSymbol}` : ''}
+          sub={
+            w?.instTvlUsd != null
+              ? `${formatCurrency(w.tvlUsd)} of ${formatCurrency(w.instTvlUsd)} ${w.instSymbol}`
+              : ''
+          }
           color="orange"
         />
         <HeroTile
@@ -125,41 +129,6 @@ export default function DerwaDetailPage() {
           color={w && w.flowUsd > 0 ? 'green' : w && w.flowUsd < 0 ? 'red' : undefined}
         />
       </div>
-
-      {/* ─── Wrap ratio bar (compact) ─── */}
-      {w?.wrapRatio != null && (
-        <div
-          className="flex items-center gap-4 p-4 rounded"
-          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-        >
-          <span className="text-[11px] font-bold" style={{ color: 'var(--text-muted)', minWidth: 80 }}>
-            WRAP RATIO
-          </span>
-          <div
-            style={{
-              flex: 1,
-              height: 10,
-              background: 'var(--border)',
-              borderRadius: 4,
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                width: `${Math.min(100, w.wrapRatio * 100)}%`,
-                height: '100%',
-                background: 'var(--accent-orange)',
-              }}
-            />
-          </div>
-          <span className="text-[12px] font-bold" style={{ color: 'var(--accent-orange)', minWidth: 70, textAlign: 'right' }}>
-            {(w.wrapRatio * 100).toFixed(2)}%
-          </span>
-          <span className="text-[10px]" style={{ color: 'var(--text-muted)', minWidth: 140 }}>
-            {formatCurrency(w.tvlUsd)} of {formatCurrency(w.instTvlUsd ?? 0)}
-          </span>
-        </div>
-      )}
 
       {/* ─── Section 2: TVL trajectory ─── */}
       {!w ? (

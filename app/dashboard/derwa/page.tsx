@@ -85,7 +85,7 @@ export default function DerwaPage() {
         title="deRWA Composability"
         subtitle={
           data
-            ? `${data.wrappers.length} freely-transferable wrappers · ${formatCurrency(data.totalDerwaTvl)} total · ${(data.totalWrapRatio * 100).toFixed(2)}% of underlying institutional pools`
+            ? `${data.wrappers.length} freely-transferable wrappers across Centrifuge V3`
             : 'Loading wrapper data…'
         }
         right={
