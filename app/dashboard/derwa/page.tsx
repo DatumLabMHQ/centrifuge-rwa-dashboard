@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import {
   Area,
@@ -178,6 +179,38 @@ export default function DerwaPage() {
             </table>
           </div>
         </TuiPanel>
+      )}
+
+      {/* Methodology disclosure for the Wrap Ratio column. The metric is
+          relative-size between two ERC-20 share classes, NOT escrowed
+          custody — the wrapper contracts hold zero institutional shares
+          on-chain, verified by balanceOf() in the methodology page. */}
+      {data && (
+        <div
+          className="text-[11px] rounded p-3"
+          style={{
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+          }}
+        >
+          <strong style={{ color: 'var(--foreground)' }}>What &ldquo;Wrap Ratio&rdquo; measures:</strong>{' '}
+          the relative size of the deRWA share class versus the
+          institutional share class, computed as{' '}
+          <code>wrapper.tvl ÷ institutional.tvl</code>. The wrappers do{' '}
+          <em>not</em> custody institutional shares on-chain (every
+          wrapper&apos;s <code>balanceOf()</code> on the institutional
+          token returns zero). The deRWA tokens are independent ERC-20s
+          issued by Centrifuge V3, sharing the underlying pool&apos;s
+          economic exposure.{' '}
+          <Link
+            href="/dashboard/methodology#wrapper-verification"
+            style={{ color: 'var(--accent-orange)' }}
+            className="hover:underline"
+          >
+            Full verification →
+          </Link>
+        </div>
       )}
     </div>
   );

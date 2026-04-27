@@ -202,9 +202,31 @@ export const SEL = {
   balanceOf: '0x70a08231',
   /** symbol() → string */
   symbol: '0x95d89b41',
+  /** name() → string */
+  name: '0x06fdde03',
   /** decimals() → uint8 */
   decimals: '0x313ce567',
 } as const;
+
+/** Decode an ABI-encoded `string` return value (offset + length + utf-8 bytes). */
+export function decodeString(hex: string | null | undefined): string | null {
+  if (!hex || hex === '0x') return null;
+  const clean = hex.replace(/^0x/, '');
+  // Layout: 32 bytes offset, 32 bytes length, then utf-8 data padded to 32-byte boundary.
+  if (clean.length < 128) return null;
+  try {
+    const length = parseInt(clean.slice(64, 128), 16);
+    if (!Number.isFinite(length) || length === 0 || length > clean.length) return null;
+    const dataHex = clean.slice(128, 128 + length * 2);
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i += 1) {
+      bytes[i] = parseInt(dataHex.slice(i * 2, i * 2 + 2), 16);
+    }
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes).replace(/\0+$/, '');
+  } catch {
+    return null;
+  }
+}
 
 /** ABI-encode a single `address` argument for eth_call data. */
 export function encodeAddress(addr: string): string {

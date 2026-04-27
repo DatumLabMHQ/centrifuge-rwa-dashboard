@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { TuiPanel } from '@/components/sdk';
 import { PageHeader } from '@/components/PageHeader';
+import { WrapperVerificationTable } from '@/components/methodology/WrapperVerificationTable';
 
 export const metadata = {
   title: 'Methodology — Centrifuge RWA Terminal',
@@ -26,6 +27,7 @@ export default function MethodologyPage() {
       <Intro />
       <DataSources />
       <ArchitectureTiers />
+      <WrapperVerificationTable />
       <PerMetric />
       <PoolCuration />
       <KnownQuirks />
