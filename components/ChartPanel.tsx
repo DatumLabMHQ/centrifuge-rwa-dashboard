@@ -91,13 +91,13 @@ export function ChartPanel({
             {actions && (
               <div data-chart-action className="flex items-center gap-1">
                 <ActionButton title="Download as PNG" onClick={onScreenshot}>
-                  PNG
+                  <CameraIcon />
                 </ActionButton>
                 <ActionButton
                   title="Expand chart"
                   onClick={() => setExpanded(true)}
                 >
-                  ⤢
+                  <ExpandIcon />
                 </ActionButton>
               </div>
             )}
@@ -121,19 +121,19 @@ export function ChartPanel({
 /* ─── Action button ─── */
 
 const ACTION_BUTTON_STYLE: CSSProperties = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: 10,
-  fontWeight: 600,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  padding: '4px 8px',
-  borderRadius: 3,
-  border: '1px solid var(--border)',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 28,
+  height: 28,
+  padding: 0,
+  borderRadius: 4,
+  border: 'none',
   background: 'transparent',
   color: 'var(--text-muted)',
   cursor: 'pointer',
   lineHeight: 1,
-  whiteSpace: 'nowrap',
+  transition: 'color 0.12s ease, background 0.12s ease',
 };
 
 function ActionButton({
@@ -152,16 +152,77 @@ function ActionButton({
       onClick={onClick}
       style={ACTION_BUTTON_STYLE}
       onMouseEnter={(e) => {
-        e.currentTarget.style.color = 'var(--accent-orange)';
-        e.currentTarget.style.borderColor = 'var(--accent-orange)';
+        e.currentTarget.style.color = 'var(--foreground)';
+        e.currentTarget.style.background = 'rgba(15,23,42,0.05)';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.color = 'var(--text-muted)';
-        e.currentTarget.style.borderColor = 'var(--border)';
+        e.currentTarget.style.background = 'transparent';
       }}
     >
       {children}
     </button>
+  );
+}
+
+/* ─── Icons ─── lucide-stroke SVGs at 16px, currentColor stroke. */
+
+function CameraIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function ExpandIcon() {
+  // Diagonal arrow pointing top-right — the "open in new / expand" glyph
+  // matching the user's reference. Simple and reads at small sizes.
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <line x1="7" y1="17" x2="17" y2="7" />
+      <polyline points="8 7 17 7 17 16" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
   );
 }
 
@@ -235,7 +296,7 @@ function ExpandedPanel({
             {badge && <span className="tui-panel-badge">{badge}</span>}
           </div>
           <ActionButton title="Close (Esc)" onClick={onClose}>
-            ✕ Close
+            <CloseIcon />
           </ActionButton>
         </div>
         <div style={{ flex: 1, padding: 16, minHeight: 0 }}>{children}</div>
