@@ -85,7 +85,20 @@ export interface ScanSwapsOpts {
   lookbackDays?: number;
   /** Average block time in seconds. Defaults to 2s (Base). */
   blockTimeSec?: number;
-  /** Chunk size for eth_getLogs. Default 9999 (under the typical 10k cap). */
+  /**
+   * Block range per eth_getLogs call.
+   *
+   * Default 49,999 — under Alchemy paid's 50k-block cap. A 30-day Base
+   * scan goes from ~130 chunks (at 9,999 each) to ~26, which combined
+   * with concurrency=8 brings cold-cache time from ~30s down to ~5s.
+   *
+   * Drop back to 9999 if the RPC starts returning "block range exceeded"
+   * — this happens on Alchemy free tier (10k cap) and on most public
+   * RPCs (drpc.org, 1rpc.io). Response size isn't a concern for our
+   * pools: deSPXA peaks at ~800 logs/day, so a 49,999-block chunk
+   * (~28h) holds at most ~1k logs, well under the 10k log response
+   * limit Alchemy enforces.
+   */
   chunkSize?: number;
   /**
    * Max concurrent eth_getLogs requests.
@@ -208,7 +221,7 @@ export async function scanPoolSwaps(opts: ScanSwapsOpts): Promise<SwapsSnapshot 
     token1,
     lookbackDays = 90,
     blockTimeSec = 2,
-    chunkSize = 9999,
+    chunkSize = 49_999,
     concurrency = 8,
   } = opts;
 
