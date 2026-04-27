@@ -22,7 +22,6 @@ import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
 import { PanelSkeleton } from '@/components/PanelSkeleton';
 import { TimeSlicer, type TimeRange } from '@/components/TimeSlicer';
-import DataQualityBadge from '@/components/ui/DataQualityBadge';
 import { ChainStack } from '@/components/ui/ChainBadge';
 
 /** Bright-theme chart palette — picked to read well on white. */
@@ -126,11 +125,6 @@ export default function OverviewPage() {
   const data = overview.data;
   const history = tvlHistory.data;
 
-  const crossCheck =
-    data && history && history.totalTvlUsd > 0
-      ? ((data.totals.tvlUsd - history.totalTvlUsd) / history.totalTvlUsd) * 100
-      : null;
-
   // Top N chains by current TVL, ignoring chains with zero TVL.
   // (Centrifuge V3 has spokes deployed on Monad / HyperEVM that don't yet
   // hold any value — DefiLlama still lists them, but they're noise here.)
@@ -144,59 +138,6 @@ export default function OverviewPage() {
     <div className="space-y-6">
       <PageHeader
         title="Overview"
-        right={
-          <div className="flex items-center gap-2 flex-wrap">
-            {data?.dataQuality && <DataQualityBadge report={data.dataQuality} />}
-            {crossCheck !== null && (
-              // Companion badge to DataQualityBadge above — same dot-and-pill
-              // grammar, same letter-spacing, so the two read as a matched
-              // pair (one authoritative, one cross-check). The previous
-              // version repeated the word "VERIFIED" on both pills which
-              // looked awkward — here we drop the verb and just label the
-              // source plus delta. Dot color shifts green → yellow when the
-              // delta exceeds 1%, so a meaningful divergence isn't hidden
-              // by green-on-green.
-              (() => {
-                const inBand = Math.abs(crossCheck) < 1;
-                const accent = inBand ? 'var(--accent-green)' : 'var(--accent-yellow)';
-                const bg = inBand ? 'rgba(46,204,113,0.14)' : 'rgba(217,119,6,0.16)';
-                return (
-                  <span
-                    className="dq-badge"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 10,
-                      letterSpacing: '0.08em',
-                      fontWeight: 600,
-                      padding: '3px 8px',
-                      borderRadius: 3,
-                      background: bg,
-                      color: accent,
-                      textTransform: 'uppercase',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    <span
-                      aria-hidden
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        background: accent,
-                        boxShadow: `0 0 0 2px ${bg}`,
-                      }}
-                    />
-                    DefiLlama {crossCheck >= 0 ? '+' : ''}
-                    {crossCheck.toFixed(2)}%
-                  </span>
-                );
-              })()
-            )}
-          </div>
-        }
       />
 
       {/* ─── TVL by Chain history ─── */}
