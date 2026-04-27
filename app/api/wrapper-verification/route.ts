@@ -16,7 +16,7 @@ import { NextResponse } from 'next/server';
 import { swr } from '@/lib/sdk/kv-cache';
 import { verifyWrapperRegistry } from '@/lib/data/onchain/wrapper-verification';
 
-const CACHE_KEY = 'centrifuge:wrapper-verification:v1';
+const CACHE_KEY = 'centrifuge:wrapper-verification:v2';
 // Wrapper addresses + name() values are immutable once deployed, so we
 // can cache aggressively. 6 hours strikes a balance between staying fresh
 // in case Centrifuge redeploys and avoiding redundant RPC calls.

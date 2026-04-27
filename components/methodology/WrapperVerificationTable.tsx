@@ -25,9 +25,9 @@ interface WrapperVerificationRow {
   onchainName: string | null;
   expectedNameSubstring: string;
   nameMatches: boolean;
-  totalSupplyRaw: string;
+  totalSupplyRaw: string | null;
   instBalanceOfWrapperRaw: string | null;
-  custodyModel: 'direct' | 'none' | 'cross-chain';
+  custodyModel: 'direct' | 'none' | 'cross-chain' | 'unknown';
   fetchedAt: number;
 }
 
@@ -147,8 +147,10 @@ export function WrapperVerificationTable() {
                     <Badge tone="green">DIRECT</Badge>
                   ) : r.custodyModel === 'none' ? (
                     <Badge tone="yellow">NO CUSTODY</Badge>
-                  ) : (
+                  ) : r.custodyModel === 'cross-chain' ? (
                     <Badge tone="muted">CROSS-CHAIN</Badge>
+                  ) : (
+                    <Badge tone="muted">UNKNOWN</Badge>
                   )}
                 </td>
               </tr>

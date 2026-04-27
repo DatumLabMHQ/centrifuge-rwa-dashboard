@@ -55,7 +55,28 @@ export type CustodyModel =
   /** Wrapper holds zero of the institutional token — independent ERC-20. */
   | 'none'
   /** No same-chain pair to test (wrapper deployed to a chain the institutional isn't on). */
-  | 'cross-chain';
+  | 'cross-chain'
+  /** RPC call failed — we couldn't determine custody. UI should retry or surface a warning. */
+  | 'unknown';
+
+/**
+ * Chain preference order when picking which chain to verify on. Earlier
+ * entries are tried first. Base is at the top because that's where our
+ * paid Alchemy RPC lives in production (`BASE_RPC_URL` set on Vercel),
+ * and most Centrifuge wrappers are also deployed on Base. Without this
+ * ordering we'd fall back to free Ethereum RPCs which throttle batch
+ * calls and silently fail.
+ */
+const CHAIN_PREFERENCE: ChainKey[] = [
+  'base',
+  'ethereum',
+  'arbitrum',
+  'avalanche',
+  'plume',
+  'optimism',
+  'bsc',
+  'monad',
+];
 
 export interface WrapperVerificationRow {
   /** deRWA wrapper symbol (e.g. "deSPXA"). */
@@ -76,8 +97,8 @@ export interface WrapperVerificationRow {
   expectedNameSubstring: string;
   /** True iff onchainName contains expectedNameSubstring (case-insensitive). */
   nameMatches: boolean;
-  /** Wrapper's totalSupply (raw 18-dec units). */
-  totalSupplyRaw: string;
+  /** Wrapper's totalSupply (raw 18-dec units). null when the RPC call failed. */
+  totalSupplyRaw: string | null;
   /**
    * Institutional token's balanceOf(wrapper) — i.e. does the wrapper
    * physically hold any institutional shares? Centrifuge wrappers have
@@ -92,22 +113,25 @@ export interface WrapperVerificationRow {
 }
 
 /**
- * Pick the chain a wrapper is most meaningful on for verification:
- * prefer a chain where BOTH the wrapper and its institutional token are
- * deployed (so balanceOf is comparable), falling back to any chain the
- * wrapper is on.
+ * Pick the chain a wrapper is most meaningful on for verification.
+ * Prefer chains where BOTH the wrapper and its institutional token are
+ * deployed (so balanceOf is comparable), iterating in CHAIN_PREFERENCE
+ * order so we hit a known-working RPC (Base / Alchemy) first. Falls
+ * back to any chain the wrapper is on.
  */
 function pickVerifyChain(
   wrapper: TokenDef,
   inst: TokenDef | undefined,
 ): ChainKey | null {
   if (inst) {
-    for (const chain of Object.keys(wrapper.deployments) as ChainKey[]) {
-      if (inst.deployments[chain]) return chain;
+    for (const chain of CHAIN_PREFERENCE) {
+      if (wrapper.deployments[chain] && inst.deployments[chain]) return chain;
     }
   }
-  const first = Object.keys(wrapper.deployments)[0] as ChainKey | undefined;
-  return first ?? null;
+  for (const chain of CHAIN_PREFERENCE) {
+    if (wrapper.deployments[chain]) return chain;
+  }
+  return null;
 }
 
 /**
@@ -145,7 +169,10 @@ export async function verifyWrapperRegistry(): Promise<WrapperVerificationRow[]>
 
     const onchainSymbol = decodeString(symHex);
     const onchainName = decodeString(nameHex);
-    const totalSupplyRaw = decodeUint(supplyHex).toString();
+    // supplyHex==null means the RPC call failed. Distinguish from a real
+    // zero return so we don't claim totalSupply=0 when we just couldn't
+    // reach the chain.
+    const totalSupplyRaw = supplyHex ? decodeUint(supplyHex).toString() : null;
     const instBalanceOfWrapperRaw = balHex ? decodeUint(balHex).toString() : null;
 
     const expectedNameSubstring = EXPECTED_NAME_SUBSTRING[wrapper.symbol] ?? '';
@@ -154,9 +181,14 @@ export async function verifyWrapperRegistry(): Promise<WrapperVerificationRow[]>
       !!expectedNameSubstring &&
       onchainName.toLowerCase().includes(expectedNameSubstring.toLowerCase());
 
+    // Custody classification carefully separates "RPC said 0" from
+    // "RPC didn't answer." A null balance must NOT be classified as
+    // 'direct' just because the != 0 path falls through.
     let custodyModel: CustodyModel;
     if (instAddress == null) {
       custodyModel = 'cross-chain';
+    } else if (instBalanceOfWrapperRaw == null) {
+      custodyModel = 'unknown';
     } else if (instBalanceOfWrapperRaw === '0') {
       custodyModel = 'none';
     } else {
