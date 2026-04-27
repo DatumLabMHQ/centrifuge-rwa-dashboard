@@ -60,50 +60,30 @@ interface PoolDayDataRow {
 
 interface PoolDayDataResponse {
   data?: {
-    pool?: {
-      id: string;
-      poolDayData?: PoolDayDataRow[];
-    } | null;
-    // Some subgraphs use `liquidityPool` (Messari standard) instead of `pool`.
-    liquidityPool?: {
-      id: string;
-      dailySnapshots?: Array<{
-        timestamp: string;
-        dailyVolumeUSD: string;
-        dailySwapCount: string;
-      }>;
-    } | null;
+    poolDayDatas?: PoolDayDataRow[];
   };
   errors?: Array<{ message: string }>;
 }
 
 /**
- * Try the Uniswap V3-style schema first (most likely — Aerodrome
- * Slipstream is a V3 fork). If the subgraph uses Messari's DEX standard
- * naming instead, fall through to that.
+ * Canonical Uniswap V3 subgraph query — Aerodrome Slipstream is a V3
+ * fork and the Aerodrome Base Full subgraph uses the standard V3 schema.
+ *
+ * Pattern: query the root-level `poolDayDatas` collection with a
+ * `where` filter on pool ID. (Querying the nested `pool.poolDayData`
+ * field doesn't accept `first`/`orderBy` args in this subgraph version.)
  */
-const QUERY_V3_STYLE = `
+const QUERY_POOL_DAY_DATA = `
   query PoolVolume($poolId: String!, $first: Int!) {
-    pool(id: $poolId) {
-      id
-      poolDayData(first: $first, orderBy: date, orderDirection: desc) {
-        date
-        volumeUSD
-        txCount
-      }
-    }
-  }
-`;
-
-const QUERY_MESSARI_STYLE = `
-  query PoolVolume($poolId: String!, $first: Int!) {
-    liquidityPool(id: $poolId) {
-      id
-      dailySnapshots(first: $first, orderBy: timestamp, orderDirection: desc) {
-        timestamp
-        dailyVolumeUSD
-        dailySwapCount
-      }
+    poolDayDatas(
+      where: { pool: $poolId }
+      orderBy: date
+      orderDirection: desc
+      first: $first
+    ) {
+      date
+      volumeUSD
+      txCount
     }
   }
 `;
@@ -161,45 +141,25 @@ export async function getAerodromeDailyVolume(
     async () => {
       const variables = { poolId: pool.toLowerCase(), first: days };
 
-      // First try Uniswap V3-style schema.
-      let json = await postQuery(url, QUERY_V3_STYLE, variables).catch((err) => {
-        console.warn('[aerodrome-subgraph] V3-style query threw:', err);
+      const json = await postQuery(url, QUERY_POOL_DAY_DATA, variables).catch((err) => {
+        console.warn('[aerodrome-subgraph] poolDayDatas query threw:', err);
         return null;
       });
 
-      let rows: DailySwapAggregate[] | null = null;
-
-      const v3Pool = json?.data?.pool;
-      if (v3Pool && Array.isArray(v3Pool.poolDayData) && v3Pool.poolDayData.length > 0) {
-        rows = v3Pool.poolDayData.map((r) => ({
-          date: tsToDate(Number(r.date)),
-          volumeUsd: Number(r.volumeUSD) || 0,
-          txCount: Number(r.txCount) || 0,
-        }));
-      }
-
-      // If V3 schema returned nothing, try Messari-style.
-      if (!rows) {
-        json = await postQuery(url, QUERY_MESSARI_STYLE, variables).catch((err) => {
-          console.warn('[aerodrome-subgraph] Messari-style query threw:', err);
-          return null;
-        });
-        const lp = json?.data?.liquidityPool;
-        if (lp && Array.isArray(lp.dailySnapshots) && lp.dailySnapshots.length > 0) {
-          rows = lp.dailySnapshots.map((r) => ({
-            date: tsToDate(Number(r.timestamp)),
-            volumeUsd: Number(r.dailyVolumeUSD) || 0,
-            txCount: Number(r.dailySwapCount) || 0,
-          }));
-        }
-      }
-
-      if (!rows) {
+      const dayData = json?.data?.poolDayDatas;
+      if (!dayData || dayData.length === 0) {
         console.warn(
-          `[aerodrome-subgraph] no data returned for pool ${pool} (tried V3 + Messari schemas)`,
+          `[aerodrome-subgraph] no poolDayDatas for pool ${pool}. errors:`,
+          json?.errors,
         );
         return null;
       }
+
+      const rows: DailySwapAggregate[] = dayData.map((r) => ({
+        date: tsToDate(Number(r.date)),
+        volumeUsd: Number(r.volumeUSD) || 0,
+        txCount: Number(r.txCount) || 0,
+      }));
 
       // Sort oldest → newest for chart consumption.
       rows.sort((a, b) => a.date.localeCompare(b.date));
