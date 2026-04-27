@@ -148,37 +148,52 @@ export default function OverviewPage() {
           <div className="flex items-center gap-2 flex-wrap">
             {data?.dataQuality && <DataQualityBadge report={data.dataQuality} />}
             {crossCheck !== null && (
-              // The DataQualityBadge above already says "VERIFIED" for the
-              // on-chain ↔ indexer reconciliation, which IS authoritative.
-              // This second pill used to say "VERIFIED vs DEFILLAMA" too,
-              // which made two adjacent VERIFIED labels — visually redundant
-              // and slightly misleading because a 0.24% delta against a
-              // third-party aggregator isn't really verification, just a
-              // sanity cross-check. Re-styled as a muted delta indicator
-              // with an ≈ glyph so the eye reads it as a comparison rather
-              // than a second authority.
-              <span
-                title={`Our headline TVL is within ${Math.abs(crossCheck).toFixed(2)}% of DefiLlama's protocol total. Differences come from methodology (which pools and chains each side counts) and snapshot timing.`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-mono"
-                style={{
-                  background: 'rgba(100,116,139,0.08)',
-                  color: 'var(--text-muted)',
-                  cursor: 'help',
-                  fontVariantNumeric: 'tabular-nums',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <span>≈ DefiLlama</span>
-                <span
-                  style={{
-                    color: Math.abs(crossCheck) < 1 ? 'var(--accent-green)' : 'var(--accent-yellow)',
-                    fontWeight: 600,
-                  }}
-                >
-                  {crossCheck >= 0 ? '+' : ''}
-                  {crossCheck.toFixed(2)}%
-                </span>
-              </span>
+              // Companion badge to DataQualityBadge above — same dot-and-pill
+              // grammar, same letter-spacing, so the two read as a matched
+              // pair (one authoritative, one cross-check). The previous
+              // version repeated the word "VERIFIED" on both pills which
+              // looked awkward — here we drop the verb and just label the
+              // source plus delta. Dot color shifts green → yellow when the
+              // delta exceeds 1%, so a meaningful divergence isn't hidden
+              // by green-on-green.
+              (() => {
+                const inBand = Math.abs(crossCheck) < 1;
+                const accent = inBand ? 'var(--accent-green)' : 'var(--accent-yellow)';
+                const bg = inBand ? 'rgba(46,204,113,0.14)' : 'rgba(217,119,6,0.16)';
+                return (
+                  <span
+                    className="dq-badge"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      letterSpacing: '0.08em',
+                      fontWeight: 600,
+                      padding: '3px 8px',
+                      borderRadius: 3,
+                      background: bg,
+                      color: accent,
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: accent,
+                        boxShadow: `0 0 0 2px ${bg}`,
+                      }}
+                    />
+                    DefiLlama {crossCheck >= 0 ? '+' : ''}
+                    {crossCheck.toFixed(2)}%
+                  </span>
+                );
+              })()
             )}
           </div>
         }
