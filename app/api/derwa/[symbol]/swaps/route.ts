@@ -1,81 +1,40 @@
 /**
  * GET /api/derwa/[symbol]/swaps
  *
- * Returns daily Swap event aggregates for the wrapper's primary DEX pool,
- * read directly from the pool contract via RPC. Includes a side-by-side
- * GeckoTerminal volume series and a divergence indicator so the reader
- * can confirm the on-chain numbers.
+ * Returns daily DEX volume aggregates for the wrapper's primary DEX pool,
+ * sourced from the Aerodrome Base Full subgraph on The Graph Network.
  *
- * Cached for 1 hour. The on-chain scan is expensive (~330 chunked
- * eth_getLogs calls for a 90-day Base window).
+ * Previous implementation read raw Swap event logs via chunked
+ * eth_getLogs (130+ calls per request, 60-90s on Vercel Hobby). The
+ * subgraph returns the same data in one GraphQL query (~200ms) and never
+ * times out. See lib/data/aerodrome-subgraph.ts for the reader.
+ *
+ * Cached for 30 minutes via the shared SWR layer.
  */
 
 import { NextResponse } from 'next/server';
-import { swr } from '@/lib/sdk/kv-cache';
 import { getDerwaContext } from '@/lib/data/derwa-context';
-import { scanPoolSwaps, type SwapsSnapshot } from '@/lib/data/onchain/swap-events';
-import { batchEthCall } from '@/lib/data/onchain/rpc';
-
-/**
- * 5 minutes. Vercel will silently cap to whatever the project plan
- * allows — Hobby gets 60s, Pro 300s, Enterprise more. The on-chain
- * Swap event scan can exceed 60s on cold cache (130+ chunked
- * eth_getLogs calls for a 90-day Base window), which is why default
- * timeouts produced perpetual "fetching..." spinners.
- */
-export const maxDuration = 300;
+import {
+  getAerodromeDailyVolume,
+  type AerodromeSwapsSnapshot,
+} from '@/lib/data/aerodrome-subgraph';
 
 const WRAPPER_SYMBOLS = new Set(['deJTRSY', 'deJAAA', 'deCRDX', 'deSPXA']);
-const DEFAULT_FRESH_TTL_S = 1800; // 30 min — DEX volume changes slowly enough
-const DEFAULT_STALE_TTL_S = 14_400; // 4 hours — keep stale data usable through quiet periods
 
 /**
- * Hard cap for the on-chain Swap event scan window.
- *
- * Why 30: a 30-day Base scan = ~130 chunked eth_getLogs calls. Even on
- * Vercel Hobby's 60s function timeout it usually completes. 60+ days
- * exceeds 60s on cold cache, the function times out before writing to
- * Redis, and every retry loops forever.
- *
- * We accept any value the client asks for but coerce it to MAX_DAYS so
- * stale browser bundles that still request `?days=90` don't trigger the
- * timeout-then-loop bug. Old caches still pull, just for a 30-day
- * window.
+ * Window cap. The subgraph is fast enough that we could go to 365+ days,
+ * but most user-visible charts read fine at 90 days and a smaller payload
+ * keeps responses snappy. Bump this if a chart needs more history.
  */
-const MAX_DAYS = 30;
-
-function freshTtlS(): number {
-  const raw = process.env.CACHE_TTL_SWAPS;
-  const v = raw ? Number(raw) : DEFAULT_FRESH_TTL_S;
-  return Number.isFinite(v) ? v : DEFAULT_FRESH_TTL_S;
-}
+const MAX_DAYS = 365;
+const DEFAULT_DAYS = 90;
 
 interface ResponsePayload {
   symbol: string;
   pool: string;
   network: string;
   windowDays: number;
-  onchain: SwapsSnapshot | null;
-}
-
-/**
- * Read a Slipstream pool's `token0()` and `token1()` so the scanner knows
- * which decimals to use and which side to treat as the USD axis. Selectors:
- *   token0() → 0x0dfe1681
- *   token1() → 0xd21220a7
- */
-async function fetchPoolTokens(
-  network: 'base',
-  pool: string,
-): Promise<{ token0: string; token1: string } | null> {
-  const [t0, t1] = await batchEthCall(network, [
-    { to: pool, data: '0x0dfe1681' },
-    { to: pool, data: '0xd21220a7' },
-  ]);
-  if (!t0 || !t1) return null;
-  // Address is right-aligned in the 32-byte response.
-  const decode = (hex: string) => '0x' + hex.replace(/^0x/, '').slice(-40);
-  return { token0: decode(t0), token1: decode(t1) };
+  onchain: AerodromeSwapsSnapshot | null;
 }
 
 export async function GET(
@@ -92,18 +51,13 @@ export async function GET(
     }
 
     const url = new URL(request.url);
-    const requested = Number(url.searchParams.get('days') ?? String(MAX_DAYS));
-    // Cap at MAX_DAYS regardless of what the client asks. Browsers with
-    // cached bundles still requesting `?days=90` hit our cap here and
-    // get the 30-day cached result back, sidestepping the cold-path
-    // function timeout that previously froze the chart on stale clients.
+    const requested = Number(url.searchParams.get('days') ?? String(DEFAULT_DAYS));
     const days = Math.min(
-      Number.isFinite(requested) && requested > 0 ? requested : MAX_DAYS,
+      Number.isFinite(requested) && requested > 0 ? requested : DEFAULT_DAYS,
       MAX_DAYS,
     );
 
-    // Resolve the wrapper's DEX pool from the context registry. This part
-    // happens outside SWR because it's pure config lookup, not a fetch.
+    // Resolve the wrapper's DEX pool from the context registry.
     const ctx = getDerwaContext(symbol);
     const dex = ctx?.integrations.find(
       (i) => i.kind === 'dex' && i.status === 'live' && i.address,
@@ -117,43 +71,22 @@ export async function GET(
 
     const network = 'base' as const;
     const pool = dex.address;
-    const cacheKey = `centrifuge:swaps:${symbol}:${days}`;
+    // The subgraph reader has its own SWR cache keyed by pool+days, so
+    // we don't wrap it again here. The dex page UI sees the same shape
+    // it did before — the `onchain` field stays for back-compat with
+    // the existing UI naming (it's now subgraph-sourced, not on-chain
+    // RPC, but downstream pages don't need to know).
+    const data = await getAerodromeDailyVolume(pool, days);
 
-    const result = await swr<ResponsePayload>(
-      cacheKey,
-      { freshTtlS: freshTtlS() },
-      async () => {
-        const tokens = await fetchPoolTokens(network, pool);
-        if (!tokens) {
-          throw new Error('Failed to read pool token0/token1 from RPC');
-        }
-        const onchain = await scanPoolSwaps({
-          network,
-          pool,
-          token0: tokens.token0,
-          token1: tokens.token1,
-          lookbackDays: days,
-        }).catch((err) => {
-          console.warn('[api/swaps] on-chain scan failed', err);
-          return null;
-        });
-        return {
-          symbol,
-          pool,
-          network,
-          windowDays: days,
-          onchain,
-        };
-      },
-    );
+    const payload: ResponsePayload = {
+      symbol,
+      pool,
+      network,
+      windowDays: days,
+      onchain: data,
+    };
 
-    void DEFAULT_STALE_TTL_S; // doc'd default; swr() supplies its own internal fallback
-    return NextResponse.json({
-      ...result.data,
-      cached: result.cached,
-      stale: result.stale,
-      ageSeconds: result.ageSeconds,
-    });
+    return NextResponse.json(payload);
   } catch (err) {
     console.error('[api/derwa/[symbol]/swaps] failed', err);
     const message = err instanceof Error ? err.message : 'Unknown error';

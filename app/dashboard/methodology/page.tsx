@@ -109,13 +109,23 @@ function DataSources() {
               <td>Tier 1 · authoritative</td>
             </tr>
             <tr>
-              <td>Aerodrome Slipstream pool</td>
-              <td>RPC · Base</td>
               <td>
-                <code>Swap</code> event logs decoded directly from the pool
-                contract — daily volume, transaction count, buy/sell pressure
+                <a
+                  href="https://thegraph.com/explorer/subgraphs/GENunSHWLBXm59mBSgPzQ8metBEp9YDfdqwFr91Av1UM"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: 'var(--accent-orange)' }}
+                >
+                  Aerodrome Base Full subgraph
+                </a>
               </td>
-              <td>Tier 1 · authoritative</td>
+              <td>GraphQL · The Graph Network</td>
+              <td>
+                Daily DEX volume + transaction count for the deSPXA Aerodrome
+                Slipstream pool. Replaced our previous chunked on-chain
+                Swap event scan, which was too slow to render reliably.
+              </td>
+              <td>Tier 2</td>
             </tr>
             <tr>
               <td>
@@ -390,15 +400,22 @@ function PerMetric() {
           where="deSPXA dex subpage"
           formula={
             <>
-              <code>Swap(sender, recipient, amount0, amount1, sqrtPriceX96, liquidity, tick)</code>{' '}
-              events read directly from the Aerodrome Slipstream pool contract
-              over the trailing 90 days. Volume = absolute value of{' '}
-              <code>amount0</code> (the USDC side) summed per UTC day.
+              Daily volume + transaction count for the deSPXA Aerodrome
+              Slipstream pool, fetched from the{' '}
+              <a
+                href="https://thegraph.com/explorer/subgraphs/GENunSHWLBXm59mBSgPzQ8metBEp9YDfdqwFr91Av1UM"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Aerodrome Base Full subgraph
+              </a>{' '}
+              on The Graph Network. Trailing 90 days by default.
             </>
           }
           notes={[
-            'Decoded fields: amount0 sign indicates direction (positive = USDC into pool = user bought deSPXA; negative = USDC out = user sold deSPXA). We surface both as separate columns so the chart can show buy/sell pressure.',
-            'Free-tier RPC chunks fail at ~10% rate, which produces a small undercount on cold cache. With a paid RPC override (BASE_RPC_URL env var) the gap closes.',
+            'We previously read raw Swap event logs directly via chunked eth_getLogs (~130 RPC calls). That approach was authoritative but consistently exceeded Vercel\u2019s function timeout on cold cache, leaving the chart in a permanent "fetching" state. The subgraph returns the same data in one query.',
+            'The subgraph is run by independent Indexers on The Graph Network — not first-party from Aerodrome itself, but battle-tested (~50M queries/month) and the standard analytics path for Aerodrome data.',
+            'Auth: requires a Graph Network API key set as THEGRAPH_API_KEY in Vercel. Free tier covers 100k queries/month — well above this dashboard\u2019s usage.',
           ]}
         />
         <Metric
