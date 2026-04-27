@@ -148,19 +148,37 @@ export default function OverviewPage() {
           <div className="flex items-center gap-2 flex-wrap">
             {data?.dataQuality && <DataQualityBadge report={data.dataQuality} />}
             {crossCheck !== null && (
-              <div
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-semibold"
+              // The DataQualityBadge above already says "VERIFIED" for the
+              // on-chain ↔ indexer reconciliation, which IS authoritative.
+              // This second pill used to say "VERIFIED vs DEFILLAMA" too,
+              // which made two adjacent VERIFIED labels — visually redundant
+              // and slightly misleading because a 0.24% delta against a
+              // third-party aggregator isn't really verification, just a
+              // sanity cross-check. Re-styled as a muted delta indicator
+              // with an ≈ glyph so the eye reads it as a comparison rather
+              // than a second authority.
+              <span
+                title={`Our headline TVL is within ${Math.abs(crossCheck).toFixed(2)}% of DefiLlama's protocol total. Differences come from methodology (which pools and chains each side counts) and snapshot timing.`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-mono"
                 style={{
-                  background: 'var(--accent-green-soft)',
-                  color: 'var(--accent-green)',
+                  background: 'rgba(100,116,139,0.08)',
+                  color: 'var(--text-muted)',
+                  cursor: 'help',
+                  fontVariantNumeric: 'tabular-nums',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <span>VERIFIED vs DEFILLAMA</span>
-                <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <span>≈ DefiLlama</span>
+                <span
+                  style={{
+                    color: Math.abs(crossCheck) < 1 ? 'var(--accent-green)' : 'var(--accent-yellow)',
+                    fontWeight: 600,
+                  }}
+                >
                   {crossCheck >= 0 ? '+' : ''}
                   {crossCheck.toFixed(2)}%
                 </span>
-              </div>
+              </span>
             )}
           </div>
         }
