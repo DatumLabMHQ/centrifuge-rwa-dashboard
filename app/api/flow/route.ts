@@ -11,8 +11,14 @@ import type { FlowData } from '@/lib/data/types';
 const DEFAULT_TTL_S = 300;
 const ALLOWED_DAYS = new Set([7, 30, 90, 365]);
 
+/**
+ * TTL resolution: prefer a flow-specific env var, then fall back to the
+ * shared overview TTL, then to DEFAULT_TTL_S. Lets operators tune flow
+ * freshness independently if they want — useful since flow data can shift
+ * faster than headline TVL during volatile periods.
+ */
 function ttlMs(): number {
-  const raw = process.env.CACHE_TTL_OVERVIEW;
+  const raw = process.env.CACHE_TTL_FLOW ?? process.env.CACHE_TTL_OVERVIEW;
   const seconds = raw ? Number(raw) : DEFAULT_TTL_S;
   return (Number.isFinite(seconds) ? seconds : DEFAULT_TTL_S) * 1000;
 }

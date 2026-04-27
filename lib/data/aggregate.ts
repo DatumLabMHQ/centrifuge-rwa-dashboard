@@ -208,20 +208,31 @@ export function aggregateOverview(
     return { pool: p, token, tvlUsd, chains };
   });
 
-  // Active = pool has TVL AND is on the curated production allowlist.
-  // Mirrors what Centrifuge publishes on their official dashboard
-  // (4 institutional + 4 deRWA wrappers = 8 typical). Long tail of
-  // experimental / test pools (ArkOdin, ArkTEST, peqTEST) is reachable
-  // via the Pools page "Show all" toggle but doesn't inflate the
-  // headline count.
-  const activePools = accs.filter(
-    (a) => a.tvlUsd > 0 && isProductionPool(a.token?.symbol),
-  ).length;
+  // Headline-eligible = pool is on the curated production allowlist AND is
+  // NOT a deRWA wrapper. Two reasons:
+  //
+  //  1. Production allowlist matches what Centrifuge publishes on their
+  //     official dashboard. Long-tail / test pools (ArkOdin, ArkTEST,
+  //     peqTEST, LIMS, JRRT, etc.) are reachable via the Pools page
+  //     "Show all" toggle but don't pollute the headline.
+  //
+  //  2. deRWA wrappers (deJTRSY, deJAAA, deSPXA, deCRDX) hold institutional
+  //     pool shares as backing — those shares are already counted in the
+  //     underlying pool's TVL. Counting wrappers separately double-counts
+  //     ~$12M (97% of SPXA's $3.78M is wrapped as deSPXA's $3.68M, etc.).
+  //     Centrifuge's official dashboard avoids this by reporting only the
+  //     institutional pool sum; wrappers are surfaced on /dashboard/derwa.
+  const isHeadlineEligible = (token: Token | undefined): boolean =>
+    isProductionPool(token?.symbol) && !isDeRwaPool(token);
 
-  // ─── per-chain TVL ───
+  const headlineAccs = accs.filter((a) => isHeadlineEligible(a.token));
+
+  const activePools = headlineAccs.filter((a) => a.tvlUsd > 0).length;
+
+  // ─── per-chain TVL (headline-eligible pools only) ───
   const chainMap = new Map<string, { name: string; chainId: number; tvlUsd: number }>();
-  for (const p of pools) {
-    for (const t of p.tokens.items) {
+  for (const a of headlineAccs) {
+    for (const t of a.pool.tokens.items) {
       for (const inst of t.tokenInstances.items) {
         const tvl = instanceTvl(inst, t);
         if (tvl <= 0) continue;
@@ -242,9 +253,14 @@ export function aggregateOverview(
   const byChain = Array.from(chainMap.values()).sort((a, b) => b.tvlUsd - a.tvlUsd);
   const tvlUsd = byChain.reduce((s, c) => s + c.tvlUsd, 0);
 
-  // ─── per-asset-class TVL ───
+  // ─── per-asset-class TVL (headline-eligible pools only) ───
+  // Wrappers are excluded here too (see headlineAccs). The phantom
+  // "Tokenized Notes: JTRSY" / "Tokenized Notes: SPXA" categories that
+  // were previously appearing in the breakdown are gone — those pool
+  // names came from deRWA wrappers whose IPFS metadata used the wrapper
+  // name as `subClass`.
   const classMap = new Map<string, { class: string; tvlUsd: number; pools: number }>();
-  for (const a of accs) {
+  for (const a of headlineAccs) {
     if (a.tvlUsd <= 0) continue;
     const cls = classifyPool(a.pool, metadataMap);
     const cur = classMap.get(cls);

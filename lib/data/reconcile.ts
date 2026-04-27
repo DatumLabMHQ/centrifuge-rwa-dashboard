@@ -307,12 +307,21 @@ export function reconcileToken(
 /**
  * Compute indexer totalIssuance per symbol from the raw pools payload —
  * sums across every pool + token + tokenInstance.
+ *
+ * IMPORTANT: BigInt issuance values use the token's own decimals
+ * (`token.decimals`), NOT a fixed 1e18. JTRSY and JAAA are 6-decimal
+ * tokens; everything else is 18. A previous version of this function
+ * hardcoded 1e18, which silently divided JTRSY/JAAA values by 10^12
+ * too much and made the data-quality tooltip falsely report Centrifuge's
+ * indexer as "100% under-reporting."
  */
 export function indexerIssuanceBySymbol(pools: Pool[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const pool of pools) {
     for (const token of pool.tokens.items) {
       const symbol = token.symbol;
+      const decimals = token.decimals ?? 18;
+      const divisor = 10 ** decimals;
       // Prefer the sum across live tokenInstances (more granular and
       // reflective of actual on-chain state the indexer observed) with a
       // fallback to the token's top-level totalIssuance for completeness.
@@ -322,10 +331,10 @@ export function indexerIssuanceBySymbol(pools: Pool[]): Record<string, number> {
       const instances = anyToken.tokenInstances?.items ?? [];
       let sum = 0;
       for (const inst of instances) {
-        sum += Number(inst.totalIssuance ?? 0) / 1e18;
+        sum += Number(inst.totalIssuance ?? 0) / divisor;
       }
       if (sum === 0) {
-        sum = Number(token.totalIssuance ?? 0) / 1e18;
+        sum = Number(token.totalIssuance ?? 0) / divisor;
       }
       if (!Number.isFinite(sum) || sum < 0) sum = 0;
       out[symbol] = (out[symbol] ?? 0) + sum;
