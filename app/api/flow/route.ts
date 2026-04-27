@@ -33,11 +33,14 @@ export async function GET(request: Request) {
     }
 
     // Cross-chain transfers come from `crosschainPayloads` (the bridge
-    // message entity itself) — NOT the pool-flow investorTransactions. We
-    // fetch up to 5000 to cover busy 30-365 day windows; if we hit the cap
-    // the aggregator flags `hitFetchCap` so the UI shows "X+" instead of a
-    // misleadingly precise count.
-    const CROSS_CHAIN_LIMIT = 5000;
+    // message entity itself) — NOT the pool-flow investorTransactions.
+    //
+    // Centrifuge's indexer rejects (502s) limits over ~1000, so we stay at
+    // the cap. When the response hits the cap exactly the aggregator flags
+    // `hitFetchCap` so the UI shows "X+" instead of a misleadingly precise
+    // count. To get a true count above 1000 we'd need pagination, which is
+    // a future-work item.
+    const CROSS_CHAIN_LIMIT = 1000;
     const [pools, txs, crossChainTxs] = await Promise.all([
       getAllPools(200),
       getRecentFlowTransactions(1000),

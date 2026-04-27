@@ -67,7 +67,7 @@ interface CrossChainTxResponse {
 }
 
 export async function getRecentCrossChainTransactions(
-  limit = 5000,
+  limit = 1000,
 ): Promise<CrossChainTransaction[]> {
   const data = await centrifuge.query<CrossChainTxResponse>(
     CENTRIFUGE_KEY,
