@@ -36,16 +36,15 @@ async function fetchDerwa(days: number): Promise<DerwaData> {
   return res.json();
 }
 
-type SortKey = 'tvlUsd' | 'wrapRatio' | 'holderCount' | 'flowUsd' | 'dexApy';
+type SortKey = 'tvlUsd' | 'wrapRatio' | 'holderCount' | 'flowUsd' | 'apy30d';
 
 /**
- * Resolve the DEX APY value for sort comparisons. The API returns null for
- * wrappers that don't have a DefiLlama-tracked pool (currently every
- * wrapper except deSPXA), and we want those to sort below ones with
- * positive yield rather than between negative values.
+ * Resolve the 30d APY for sort comparisons. We treat null (no NAV history
+ * yet) as -Infinity so those rows sort below numeric values rather than
+ * mixing into the middle.
  */
-function dexApyFor(w: DerwaWrapperRow): number {
-  return w.dex?.apy ?? -1;
+function apyFor(w: DerwaWrapperRow): number {
+  return w.apy30d ?? Number.NEGATIVE_INFINITY;
 }
 
 export default function DerwaPage() {
@@ -65,7 +64,7 @@ export default function DerwaPage() {
   const wrappers = useMemo(() => {
     const list = data?.wrappers ?? [];
     const valueOf = (w: DerwaWrapperRow): number => {
-      if (sortKey === 'dexApy') return dexApyFor(w);
+      if (sortKey === 'apy30d') return apyFor(w);
       return (w[sortKey] ?? 0) as number;
     };
     const sorted = [...list].sort((a, b) => {
@@ -177,10 +176,10 @@ export default function DerwaPage() {
                   <th
                     className="text-right"
                     style={{ cursor: 'pointer' }}
-                    onClick={() => setSort('dexApy')}
-                    title="Annualised yield from the wrapper's DEX pool. Comes from DefiLlama; may include LP token emissions, not just swap-fee yield."
+                    onClick={() => setSort('apy30d')}
+                    title="30-day NAV-based APY, sourced from Centrifuge's TokenSnapshot.yield30dComp365 field. Same source the official Centrifuge deRWA dashboard uses. For equity index wrappers (e.g. deSPXA) this reflects price volatility annualised, not income yield."
                   >
-                    DEX APY{arrow('dexApy')}
+                    APY (30d){arrow('apy30d')}
                   </th>
                   <th className="text-right">DEX Vol 24h</th>
                   <th className="text-right">Premium</th>
@@ -317,7 +316,7 @@ function ComparisonRow({
         {w.flowUsd === 0 ? '—' : formatCurrencySigned(w.flowUsd)}
       </td>
       <td className="text-right">
-        <DexApyCell dex={w.dex} />
+        <ApyCell apy={w.apy30d} symbol={w.symbol} />
       </td>
       <td className="text-right">
         {w.dex ? (
@@ -371,32 +370,41 @@ function IntegrationsCell({ symbol }: { symbol: string }) {
 }
 
 /**
- * DEX APY cell. Renders the headline APY figure plus a small disclosure
- * line when the yield is dominated by LP token emissions rather than
- * swap fees, so readers don't read the number as risk-free organic yield.
+ * 30-day APY cell. Renders the NAV-based annualised yield from
+ * Centrifuge's TokenSnapshot indexer field. Same source their official
+ * deRWA dashboard uses.
  *
- * Falls back to "—" for wrappers that don't have a DefiLlama-tracked
- * pool yet (deJTRSY, deJAAA — Aerodrome listed but no DefiLlama pool ID;
- * deCRDX — Aerodrome integration is announced not live).
+ * Equity-index wrappers (currently deSPXA only) get a "price-based"
+ * annotation since NAV growth on an S&P 500 fund reflects market
+ * volatility rather than income yield. For fixed-income wrappers
+ * (deJTRSY, deJAAA, deCRDX) the number IS yield in the conventional
+ * sense.
  */
-function DexApyCell({ dex }: { dex: DerwaWrapperRow['dex'] }) {
-  if (!dex || dex.apy == null) {
+function ApyCell({ apy, symbol }: { apy: number | null; symbol: string }) {
+  if (apy == null) {
     return <span style={{ color: 'var(--text-muted)' }}>—</span>;
   }
-  // "Mostly emissions" when reward APY is at least 80% of total APY.
-  // Threshold rather than equality because DefiLlama's apyBase can be
-  // null (treated as 0) or a tiny non-zero number even on emission-led
-  // pools.
-  const reward = dex.apyReward ?? 0;
-  const dominantlyEmissions = dex.apy > 0 && reward / dex.apy > 0.8;
+  const pct = apy * 100;
+  // Equity-index wrappers — NAV-based APY is volatile and not yield in
+  // the income sense. Centrifuge's UI suppresses these to 0%; we render
+  // the raw computed value with a disclaimer instead.
+  const isEquityIndex = symbol === 'deSPXA';
+  const tone =
+    pct >= 0
+      ? 'num-positive'
+      : 'num-negative';
   return (
     <div className="flex flex-col items-end" style={{ lineHeight: 1.2 }}>
-      <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} className="num-positive">
-        {dex.apy.toFixed(2)}%
+      <span
+        style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
+        className={tone}
+      >
+        {pct >= 0 ? '+' : ''}
+        {pct.toFixed(2)}%
       </span>
-      {dominantlyEmissions && (
+      {isEquityIndex && (
         <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>
-          mostly LP emissions
+          NAV-based, price volatility
         </span>
       )}
     </div>

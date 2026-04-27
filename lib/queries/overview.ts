@@ -163,6 +163,13 @@ export const TOKEN_SNAPSHOTS_QUERY = gql`
         timestamp
         totalIssuance
         tokenPrice
+        # Compounded 30-day yield, annualised on a 365-day basis. Stored
+        # as BigInt with 27-decimal precision (divide by 1e27 to get the
+        # decimal yield, e.g. 0.0404 = 4.04% APY). This is the same
+        # source Centrifuge's official deRWA dashboard uses for the
+        # "APY" column. Populated only on snapshots taken after the
+        # token has 30+ days of NAV history.
+        yield30dComp365
       }
     }
   }

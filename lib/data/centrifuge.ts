@@ -86,6 +86,15 @@ export interface TokenSnapshot {
   timestamp: string;
   totalIssuance: string;
   tokenPrice: string;
+  /**
+   * Compounded 30-day yield, annualised on a 365-day basis. BigInt-as-string
+   * with 27-decimal precision (divide by 1e27 for the decimal yield;
+   * e.g. "40363246142849114000000000" → 0.0404 → 4.04% APY).
+   *
+   * Null when the token doesn't have 30 full days of NAV history yet,
+   * or when Centrifuge's indexer hasn't computed it.
+   */
+  yield30dComp365: string | null;
 }
 
 interface SnapshotResponse {

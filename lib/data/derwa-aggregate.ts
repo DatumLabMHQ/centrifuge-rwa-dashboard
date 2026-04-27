@@ -245,6 +245,24 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
     const snapshots = snapshotsBySymbol.get(sym) ?? [];
     const sparkline = buildSparkline(snapshots, token.decimals, cutoff);
 
+    // Organic 30-day APY — the same field Centrifuge's official deRWA
+    // dashboard displays as "APY". snapshots are sorted newest-first so
+    // [0] is the most recent. Stored as BigInt with 27-decimal precision
+    // (yields are fractions: 0.0404 = 4.04% APY). Null when the indexer
+    // hasn't computed it yet (typically newer tokens with <30 days of
+    // NAV history).
+    const latestSnap = snapshots[0];
+    const apy30d =
+      latestSnap?.yield30dComp365
+        ? (() => {
+            try {
+              return Number(BigInt(latestSnap.yield30dComp365) / BigInt(10) ** BigInt(20)) / 1e7;
+            } catch {
+              return null;
+            }
+          })()
+        : null;
+
     // Euler lending market stats — pulled on-chain by the API route.
     const eulerIntegration = ctx.integrations.find(
       (i) => i.kind === 'lending' && i.protocol === 'Euler' && i.status === 'live',
@@ -319,6 +337,7 @@ export function aggregateDerwa(input: AggregateDerwaInput): DerwaData {
       holderCount: holderAccounts.size,
       topHolders,
       sparkline,
+      apy30d,
       euler,
       dex,
     });

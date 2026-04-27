@@ -179,6 +179,23 @@ export interface DerwaWrapperRow {
   /** Historical TVL series (within the active window). */
   sparkline: Array<{ t: number; tvl: number }>;
 
+  /**
+   * 30-day NAV-based APY, sourced from the Centrifuge indexer's
+   * `TokenSnapshot.yield30dComp365` field (compounded, annualised on
+   * 365-day basis). Stored as a decimal — 0.0404 means 4.04% APY.
+   *
+   * Same source Centrifuge's official deRWA dashboard uses. Note that
+   * for equity index funds (e.g. deSPXA tracking the S&P 500) this
+   * value reflects 30-day NAV growth annualised, which is volatile
+   * and not really "yield" in the income sense. Centrifuge's UI
+   * suppresses it to 0% for those; we surface the raw computed value
+   * with a methodology note.
+   *
+   * Null when the token has &lt;30 days of NAV history or the indexer
+   * hasn't computed it.
+   */
+  apy30d: number | null;
+
   /** Euler lending market stats — sourced from the Goldsky subgraph.
    *  Null when the wrapper has no Euler market or the query failed. */
   euler: {
