@@ -307,10 +307,17 @@ export function aggregateOverview(
   }
 
   // ─── top pools by TVL ───
-  const topPools = accs
+  // Iterate `headlineAccs` (production allowlist, no deRWA wrappers) so the
+  // list is consistent with the headline TVL and the byChain / byAssetClass
+  // breakdowns above. Without this filter, deJAAA ($5.95M) ranks 5th by pool
+  // size and surfaces alongside the institutional pools — which is misleading
+  // because the wrapped value is already represented in the underlying pool's
+  // share class. Capped at 4 (one per active institutional fund) so the list
+  // matches Centrifuge's published 4-fund grid.
+  const topPools = headlineAccs
     .filter((a) => a.tvlUsd > 0)
     .sort((a, b) => b.tvlUsd - a.tvlUsd)
-    .slice(0, 5)
+    .slice(0, 4)
     .map((a) => ({
       id: a.pool.id,
       name: a.pool.name ?? a.token?.name ?? a.pool.id,
