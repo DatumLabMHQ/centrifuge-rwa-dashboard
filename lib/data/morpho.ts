@@ -125,11 +125,16 @@ export async function getMorphoMarketStats(
     const maxBorrow = collateralUsd * lltv;
     const distanceToLiquidation = maxBorrow > 0 ? 1 - (borrowUsd / maxBorrow) : 1;
 
-    // Clean historical series (filter nulls)
+    // Clean historical series (filter nulls) and sort ascending by
+    // timestamp. Morpho's GraphQL returns historicalState arrays
+    // newest-first, which made Recharts animate every line from the
+    // right edge leftward. Sorting here ensures all five charts on
+    // the deRWA Morpho page draw chronologically left-to-right.
     const cleanSeries = (arr: Array<{ x: number; y: number | null }> | null) =>
       (arr ?? [])
         .filter((p): p is { x: number; y: number } => p.y != null && Number.isFinite(p.y))
-        .map((p) => ({ x: p.x, y: p.y }));
+        .map((p) => ({ x: p.x, y: p.y }))
+        .sort((a, b) => a.x - b.x);
 
     return {
       marketId,
