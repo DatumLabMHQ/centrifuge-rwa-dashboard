@@ -20,7 +20,6 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ReferenceLine,
@@ -62,24 +61,49 @@ const TOOLTIP_STYLE = {
 };
 
 /**
- * Compact legend pinned to the top-right of each chart. Uses small text and
- * a thin line icon so it doesn't compete with the chart for visual weight.
- * The trade-off is `margin.top: 24` on the parent chart so the lines aren't
- * obscured by the legend strip.
+ * Compact two-dot legend rendered as the chart panel's badge — saves the
+ * 36px+ of dead-space-at-top that an in-chart Recharts <Legend> required
+ * to avoid overlapping data. Lives in the panel header so the chart area
+ * starts immediately under the title.
+ *
+ * Green = supply / lender side. Red = borrow / cost side. Same colour
+ * convention applies to every multi-series chart on this page so the
+ * badge format stays consistent.
  */
-const LEGEND_PROPS = {
-  verticalAlign: 'top' as const,
-  align: 'right' as const,
-  height: 20,
-  iconType: 'plainline' as const,
-  iconSize: 14,
-  wrapperStyle: {
-    fontSize: 10,
-    fontWeight: 600,
-    color: '#475569',
-    paddingBottom: 4,
-  },
-};
+function TwoSeriesBadge({
+  supply,
+  borrow,
+}: {
+  supply: string;
+  borrow: string;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-3"
+      style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}
+    >
+      <SeriesDot color="#16A34A" label={supply} />
+      <SeriesDot color="#DC2626" label={borrow} />
+    </span>
+  );
+}
+
+function SeriesDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        aria-hidden
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: color,
+        }}
+      />
+      <span>{label}</span>
+    </span>
+  );
+}
 
 export default function MorphoSubPage() {
   const params = useParams<{ symbol: string }>();
@@ -147,9 +171,13 @@ export default function MorphoSubPage() {
           {/* ─── Section 3: IRM Curve + APY History (side by side) ─── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {m.irmCurve.length > 0 && (
-              <ChartPanel title="INTEREST RATE MODEL" badge="Rates vs utilization" height="h-64">
+              <ChartPanel
+                title="INTEREST RATE MODEL"
+                badge={<TwoSeriesBadge supply="Supply APY" borrow="Borrow APY" />}
+                height="h-64"
+              >
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={m.irmCurve} margin={{ top: 36, right: 12, left: 0, bottom: 0 }}>
+                  <LineChart data={m.irmCurve} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis
                       dataKey="utilization"
@@ -178,7 +206,6 @@ export default function MorphoSubPage() {
                       labelFormatter={(v) => `Utilization: ${(Number(v) * 100).toFixed(0)}%`}
                       labelStyle={{ fontWeight: 700 }}
                     />
-                    <Legend {...LEGEND_PROPS} />
                     <ReferenceLine
                       x={m.utilization}
                       stroke="var(--accent-orange)"
@@ -186,10 +213,6 @@ export default function MorphoSubPage() {
                       strokeWidth={2}
                       label={{ value: 'NOW', position: 'top', fontSize: 10, fill: '#EA580C', fontWeight: 700 }}
                     />
-                    {/* Borrow drawn first → Supply drawn on top. Recharts'
-                         legend renders in REVERSE child order, so this gives
-                         "Supply APY · Borrow APY" reading order in the legend,
-                         matching the economics (lender perspective leads). */}
                     <Line type="monotone" dataKey="borrowApy" name="Borrow APY" stroke="#DC2626" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="supplyApy" name="Supply APY" stroke="#16A34A" strokeWidth={2} dot={false} />
                   </LineChart>
@@ -198,17 +221,17 @@ export default function MorphoSubPage() {
             )}
 
             {m.historicalSupplyApy.length > 2 && (
-              <ChartPanel title="APY HISTORY" badge="Lender vs borrower rates over time" height="h-64">
+              <ChartPanel
+                title="APY HISTORY"
+                badge={<TwoSeriesBadge supply="Supply APY" borrow="Borrow APY" />}
+                height="h-64"
+              >
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart margin={{ top: 36, right: 12, left: 0, bottom: 0 }}>
+                  <LineChart margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
                     <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} stroke="#CBD5E1" width={48} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`} />
-                    <Legend {...LEGEND_PROPS} />
-                    {/* Borrow first so it draws underneath; Supply on top.
-                         Recharts reverses legend order vs JSX, so the
-                         on-screen legend reads "Supply APY · Borrow APY". */}
                     <Line data={m.historicalBorrowApy} type="monotone" dataKey="y" name="Borrow APY" stroke="#DC2626" strokeWidth={1.5} dot={false} />
                     <Line data={m.historicalSupplyApy} type="monotone" dataKey="y" name="Supply APY" stroke="#16A34A" strokeWidth={1.5} dot={false} />
                   </LineChart>
@@ -220,9 +243,13 @@ export default function MorphoSubPage() {
           {/* ─── Section 4: Supply/Borrow + Utilization (side by side) ─── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {m.historicalSupplyUsd.length > 2 && (
-              <ChartPanel title="SUPPLY & BORROW" badge={`${m.historicalSupplyUsd.length} data points`} height="h-56">
+              <ChartPanel
+                title="SUPPLY & BORROW"
+                badge={<TwoSeriesBadge supply="Supply" borrow="Borrow" />}
+                height="h-56"
+              >
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart margin={{ top: 36, right: 12, left: 0, bottom: 0 }}>
+                  <AreaChart margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradSupply" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#16A34A" stopOpacity={0.2} />
@@ -237,10 +264,6 @@ export default function MorphoSubPage() {
                     <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
                     <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => formatCurrency(v)} stroke="#CBD5E1" width={60} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => formatCurrency(Number(v))} />
-                    <Legend {...LEGEND_PROPS} iconType="square" />
-                    {/* Borrow first so the Supply area draws on top — and
-                         Recharts reverses legend order, so the on-screen
-                         legend reads "Supply · Borrow". */}
                     <Area data={m.historicalBorrowUsd} type="monotone" dataKey="y" name="Borrow" stroke="#DC2626" fill="url(#gradBorrow)" strokeWidth={1.5} />
                     <Area data={m.historicalSupplyUsd} type="monotone" dataKey="y" name="Supply" stroke="#16A34A" fill="url(#gradSupply)" strokeWidth={1.5} />
                   </AreaChart>
