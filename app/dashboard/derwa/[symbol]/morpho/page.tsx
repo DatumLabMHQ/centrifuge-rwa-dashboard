@@ -31,6 +31,16 @@ import {
 import { ErrorState, TuiPanel } from '@/components/sdk';
 import { formatCurrency } from '@/lib/format';
 import { formatAddress } from '@/lib/sdk/helpers';
+import {
+  ACCENT_GREEN,
+  ACCENT_ORANGE,
+  ACCENT_RED,
+  AXIS_STROKE,
+  AXIS_TICK_COMPACT,
+  GRID_STROKE,
+  TOOLTIP_LABEL_STYLE,
+  TOOLTIP_STYLE,
+} from '@/lib/chart-theme';
 import type { DerwaDetailData, MorphoMarketData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
@@ -51,14 +61,6 @@ function fmtTsFull(ts: number): string {
   const d = new Date(ts * 1000);
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-
-const TOOLTIP_STYLE = {
-  background: '#FFFFFF',
-  border: '1px solid #E2E8F0',
-  borderRadius: 4,
-  fontSize: 11,
-  boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
-};
 
 /**
  * Compact two-dot legend rendered as the chart panel's badge — saves the
@@ -82,8 +84,8 @@ function TwoSeriesBadge({
       className="inline-flex items-center gap-3"
       style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}
     >
-      <SeriesDot color="#16A34A" label={supply} />
-      <SeriesDot color="#DC2626" label={borrow} />
+      <SeriesDot color="var(--accent-green)" label={supply} />
+      <SeriesDot color="var(--accent-red)" label={borrow} />
     </span>
   );
 }
@@ -184,7 +186,7 @@ export default function MorphoSubPage() {
                        font label without re-introducing the dead band that
                        the legend-into-header refactor removed. */}
                   <LineChart data={m.irmCurve} margin={{ top: 18, right: 12, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
                     <XAxis
                       dataKey="utilization"
                       type="number"
@@ -195,32 +197,32 @@ export default function MorphoSubPage() {
                       // utilisation snapshot from the IRM curve), which
                       // overlapped each other and made the axis unreadable.
                       ticks={[0, 0.2, 0.4, 0.6, 0.8, 1]}
-                      tick={{ fontSize: 9, fill: '#64748B' }}
+                      tick={AXIS_TICK_COMPACT}
                       tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-                      stroke="#CBD5E1"
+                      stroke={AXIS_STROKE}
                       tickMargin={6}
                     />
                     <YAxis
-                      tick={{ fontSize: 9, fill: '#64748B' }}
+                      tick={AXIS_TICK_COMPACT}
                       tickFormatter={(v) => `${(v * 100).toFixed(1)}%`}
-                      stroke="#CBD5E1"
+                      stroke={AXIS_STROKE}
                       width={48}
                     />
                     <Tooltip
                       contentStyle={TOOLTIP_STYLE}
                       formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`}
                       labelFormatter={(v) => `Utilization: ${(Number(v) * 100).toFixed(0)}%`}
-                      labelStyle={{ fontWeight: 700 }}
+                      labelStyle={TOOLTIP_LABEL_STYLE}
                     />
                     <ReferenceLine
                       x={m.utilization}
                       stroke="var(--accent-orange)"
                       strokeDasharray="4 4"
                       strokeWidth={2}
-                      label={{ value: 'NOW', position: 'top', fontSize: 10, fill: '#EA580C', fontWeight: 700 }}
+                      label={{ value: 'NOW', position: 'top', fontSize: 10, fill: 'var(--accent-orange)', fontWeight: 700 }}
                     />
-                    <Line type="monotone" dataKey="borrowApy" name="Borrow APY" stroke="#DC2626" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="supplyApy" name="Supply APY" stroke="#16A34A" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="borrowApy" name="Borrow APY" stroke={ACCENT_RED} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="supplyApy" name="Supply APY" stroke={ACCENT_GREEN} strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </ChartPanel>
@@ -234,12 +236,12 @@ export default function MorphoSubPage() {
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
-                    <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} stroke="#CBD5E1" width={48} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+                    <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={AXIS_TICK_COMPACT} tickFormatter={fmtTs} stroke={AXIS_STROKE} tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
+                    <YAxis tick={AXIS_TICK_COMPACT} tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} stroke={AXIS_STROKE} width={48} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`} />
-                    <Line data={m.historicalBorrowApy} type="monotone" dataKey="y" name="Borrow APY" stroke="#DC2626" strokeWidth={1.5} dot={false} />
-                    <Line data={m.historicalSupplyApy} type="monotone" dataKey="y" name="Supply APY" stroke="#16A34A" strokeWidth={1.5} dot={false} />
+                    <Line data={m.historicalBorrowApy} type="monotone" dataKey="y" name="Borrow APY" stroke={ACCENT_RED} strokeWidth={1.5} dot={false} />
+                    <Line data={m.historicalSupplyApy} type="monotone" dataKey="y" name="Supply APY" stroke={ACCENT_GREEN} strokeWidth={1.5} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </ChartPanel>
@@ -266,12 +268,12 @@ export default function MorphoSubPage() {
                         <stop offset="95%" stopColor="#DC2626" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
-                    <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => formatCurrency(v)} stroke="#CBD5E1" width={60} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+                    <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={AXIS_TICK_COMPACT} tickFormatter={fmtTs} stroke={AXIS_STROKE} tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
+                    <YAxis tick={AXIS_TICK_COMPACT} tickFormatter={(v) => formatCurrency(v)} stroke={AXIS_STROKE} width={60} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => formatCurrency(Number(v))} />
-                    <Area data={m.historicalBorrowUsd} type="monotone" dataKey="y" name="Borrow" stroke="#DC2626" fill="url(#gradBorrow)" strokeWidth={1.5} />
-                    <Area data={m.historicalSupplyUsd} type="monotone" dataKey="y" name="Supply" stroke="#16A34A" fill="url(#gradSupply)" strokeWidth={1.5} />
+                    <Area data={m.historicalBorrowUsd} type="monotone" dataKey="y" name="Borrow" stroke={ACCENT_RED} fill="url(#gradBorrow)" strokeWidth={1.5} />
+                    <Area data={m.historicalSupplyUsd} type="monotone" dataKey="y" name="Supply" stroke={ACCENT_GREEN} fill="url(#gradSupply)" strokeWidth={1.5} />
                   </AreaChart>
                 </ResponsiveContainer>
               </ChartPanel>
@@ -287,9 +289,9 @@ export default function MorphoSubPage() {
                         <stop offset="95%" stopColor="#EA580C" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} />
-                    <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} stroke="#CBD5E1" width={45} domain={[0, 1]} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+                    <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={AXIS_TICK_COMPACT} tickFormatter={fmtTs} stroke={AXIS_STROKE} tickMargin={6} minTickGap={30} />
+                    <YAxis tick={AXIS_TICK_COMPACT} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} stroke={AXIS_STROKE} width={45} domain={[0, 1]} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => `${(Number(v) * 100).toFixed(1)}%`} />
                     {/* Anchor the label at top-LEFT instead of top-right.
                          `insideTopRight` was leaking text past the right edge
@@ -299,8 +301,8 @@ export default function MorphoSubPage() {
                          the label floats clear of any data. Also shortened
                          to "90% max" since the panel badge already carries
                          the "danger zone" framing. */}
-                    <ReferenceLine y={0.9} stroke="var(--accent-red)" strokeDasharray="4 4" label={{ value: '90% max', position: 'insideTopLeft', fontSize: 9, fill: '#DC2626', fontWeight: 700 }} />
-                    <Area type="monotone" dataKey="y" name="Utilization" stroke="#EA580C" fill="url(#gradUtil)" strokeWidth={2} />
+                    <ReferenceLine y={0.9} stroke="var(--accent-red)" strokeDasharray="4 4" label={{ value: '90% max', position: 'insideTopLeft', fontSize: 9, fill: 'var(--accent-red)', fontWeight: 700 }} />
+                    <Area type="monotone" dataKey="y" name="Utilization" stroke={ACCENT_ORANGE} fill="url(#gradUtil)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
               </ChartPanel>

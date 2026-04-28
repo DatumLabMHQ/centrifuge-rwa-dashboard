@@ -8,6 +8,7 @@ import {
   TuiPanel,
 } from '@/components/sdk';
 import { formatCurrency } from '@/lib/format';
+import { TOOLTIP_STYLE } from '@/lib/chart-theme';
 import type { CrossChainFlowData, FlowData, FlowNode } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
@@ -237,7 +238,7 @@ export default function FlowPage() {
                           y={y + height / 2}
                           textAnchor={isLeft ? 'start' : 'end'}
                           fontSize={11}
-                          fill="#0F172A"
+                          fill="var(--foreground)"
                           dominantBaseline="middle"
                           fontWeight={600}
                         >
@@ -249,13 +250,7 @@ export default function FlowPage() {
                 }}
               >
                 <Tooltip
-                  contentStyle={{
-                    background: '#FFFFFF',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: 4,
-                    fontSize: 11,
-                    boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
-                  }}
+                  contentStyle={TOOLTIP_STYLE}
                   formatter={(v) => formatCurrency(Number(v))}
                 />
               </Sankey>
@@ -288,7 +283,7 @@ export default function FlowPage() {
                       y={y + height / 2}
                       textAnchor={isSource ? 'start' : 'end'}
                       fontSize={11}
-                      fill="#0F172A"
+                      fill="var(--foreground)"
                       dominantBaseline="middle"
                       fontWeight={700}
                       style={{ textTransform: 'capitalize' }}
@@ -300,13 +295,7 @@ export default function FlowPage() {
               }}
             >
               <Tooltip
-                contentStyle={{
-                  background: '#FFFFFF',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: 4,
-                  fontSize: 11,
-                  boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
-                }}
+                contentStyle={TOOLTIP_STYLE}
                 formatter={(v) => `${Number(v).toLocaleString()} transfers`}
               />
             </Sankey>

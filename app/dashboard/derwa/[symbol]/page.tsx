@@ -26,6 +26,13 @@ import {
 } from 'recharts';
 import { ErrorState } from '@/components/sdk';
 import { formatCurrency, formatCurrencySigned } from '@/lib/format';
+import {
+  ACCENT_ORANGE,
+  AXIS_STROKE,
+  AXIS_TICK,
+  GRID_STROKE,
+  TOOLTIP_STYLE,
+} from '@/lib/chart-theme';
 import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import DataQualityBadge from '@/components/ui/DataQualityBadge';
@@ -147,38 +154,32 @@ export default function DerwaDetailPage() {
                   <stop offset="95%" stopColor="#EA580C" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
               <XAxis
                 dataKey="t"
                 type="number"
                 domain={['dataMin', 'dataMax']}
-                tick={{ fontSize: 10, fill: '#64748B' }}
+                tick={AXIS_TICK}
                 tickFormatter={(v: number) => {
                   const d = new Date(v);
                   return `${d.toLocaleString('en-US', { month: 'short' })} ${d.getDate()}`;
                 }}
-                stroke="#CBD5E1"
+                stroke={AXIS_STROKE}
                 tickMargin={8}
                 minTickGap={40}
               />
               <YAxis
-                tick={{ fontSize: 10, fill: '#64748B' }}
+                tick={AXIS_TICK}
                 tickFormatter={(v) => formatCurrency(Number(v))}
-                stroke="#CBD5E1"
+                stroke={AXIS_STROKE}
                 width={70}
               />
               <RechartsTooltip
-                contentStyle={{
-                  background: '#FFFFFF',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: 4,
-                  fontSize: 11,
-                  boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
-                }}
+                contentStyle={TOOLTIP_STYLE}
                 labelFormatter={(v) => new Date(Number(v)).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                 formatter={(v) => [formatCurrency(Number(v)), 'TVL']}
               />
-              <Area type="monotone" dataKey="tvl" stroke="#EA580C" strokeWidth={2} fill="url(#tvlGrad)" />
+              <Area type="monotone" dataKey="tvl" stroke={ACCENT_ORANGE} strokeWidth={2} fill="url(#tvlGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </ChartPanel>

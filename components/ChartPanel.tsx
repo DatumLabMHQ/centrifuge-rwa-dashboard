@@ -55,10 +55,17 @@ export function ChartPanel({
       // Dynamic import keeps html-to-image out of the initial bundle —
       // most users never click screenshot, and it's ~14KB gzipped.
       const { toPng } = await import('html-to-image');
+      // Read the live --bg CSS variable so the screenshot uses the
+      // active theme's background. Hardcoding white here produced a
+      // white-bg PNG even in dark mode, which doesn't match the
+      // captured panel.
+      const themeBg =
+        getComputedStyle(document.body).getPropertyValue('--card').trim() ||
+        '#FFFFFF';
       const dataUrl = await toPng(captureRef.current, {
         cacheBust: true,
         pixelRatio: 2,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: themeBg,
         // Skip the action buttons themselves so the screenshot doesn't
         // show "PNG | EXPAND" in the corner of the captured image.
         filter: (node) =>

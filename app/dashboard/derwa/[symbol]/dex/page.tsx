@@ -16,6 +16,14 @@ import {
 import { ErrorState, TuiPanel } from '@/components/sdk';
 import { formatCurrency } from '@/lib/format';
 import { formatAddress } from '@/lib/sdk/helpers';
+import {
+  ACCENT_BLUE,
+  AXIS_STROKE,
+  AXIS_TICK,
+  GRID_STROKE,
+  TOOLTIP_LABEL_STYLE,
+  TOOLTIP_STYLE,
+} from '@/lib/chart-theme';
 import type { DerwaDetailData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
@@ -301,33 +309,28 @@ function SwapActivitySection({
       >
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={merged} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10, fill: '#64748B' }}
+              tick={AXIS_TICK}
               tickFormatter={(d: string) =>
                 d && d.length >= 10
                   ? `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(d.slice(5,7)) - 1]} ${Number(d.slice(8,10))}`
                   : d
               }
-              stroke="#CBD5E1"
+              stroke={AXIS_STROKE}
               interval={Math.max(0, Math.floor(merged.length / 10) - 1)}
               minTickGap={20}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: '#64748B' }}
+              tick={AXIS_TICK}
               tickFormatter={(v) => formatCurrency(Number(v))}
-              stroke="#CBD5E1"
+              stroke={AXIS_STROKE}
               width={70}
             />
             <Tooltip
-              contentStyle={{
-                background: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                borderRadius: 4,
-                fontSize: 11,
-              }}
-              labelStyle={{ color: '#0F172A', fontWeight: 700 }}
+              contentStyle={TOOLTIP_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
               formatter={(value: unknown, name: unknown) => [
                 formatCurrency(Number(value ?? 0)),
                 String(name ?? ''),
@@ -343,7 +346,7 @@ function SwapActivitySection({
             <Bar
               dataKey="onchainVol"
               name="On-chain Volume"
-              fill="#2563EB"
+              fill={ACCENT_BLUE}
               fillOpacity={0.85}
               barSize={5}
             />

@@ -17,6 +17,12 @@ import {
   TuiPanel,
 } from '@/components/sdk';
 import { formatCurrency } from '@/lib/format';
+import {
+  ACCENT_ORANGE,
+  AXIS_STROKE,
+  AXIS_TICK,
+  GRID_STROKE,
+} from '@/lib/chart-theme';
 import type { OverviewData, TvlHistoryData } from '@/lib/data/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ChartPanel } from '@/components/ChartPanel';
@@ -175,20 +181,20 @@ export default function OverviewPage() {
                   </linearGradient>
                 ))}
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 10, fill: '#64748B' }}
+                tick={AXIS_TICK}
                 tickFormatter={(d: string) => formatXAxisDate(d, range)}
-                stroke="#CBD5E1"
+                stroke={AXIS_STROKE}
                 interval={pickTickInterval(slicedSeries.length)}
                 tickMargin={8}
                 minTickGap={20}
               />
               <YAxis
-                tick={{ fontSize: 10, fill: '#64748B' }}
+                tick={AXIS_TICK}
                 tickFormatter={(v) => formatCurrency(Number(v))}
-                stroke="#CBD5E1"
+                stroke={AXIS_STROKE}
                 width={70}
               />
               <Tooltip
@@ -334,16 +340,17 @@ function TvlByChainTooltip({
   return (
     <div
       style={{
-        background: '#FFFFFF',
-        border: '1px solid #E2E8F0',
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
         borderRadius: 4,
         fontSize: 11,
         padding: '10px 12px',
-        boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
         minWidth: 160,
+        color: 'var(--foreground)',
       }}
     >
-      <div style={{ color: '#0F172A', fontWeight: 700, marginBottom: 6 }}>
+      <div style={{ color: 'var(--foreground)', fontWeight: 700, marginBottom: 6 }}>
         {label ? formatTooltipDate(String(label)) : ''}
       </div>
       {sorted.map((p, i) => (
@@ -355,7 +362,7 @@ function TvlByChainTooltip({
             justifyContent: 'space-between',
             gap: 12,
             padding: '2px 0',
-            color: '#0F172A',
+            color: 'var(--foreground)',
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textTransform: 'capitalize' }}>
@@ -374,13 +381,13 @@ function TvlByChainTooltip({
           gap: 12,
           padding: '6px 0 0',
           marginTop: 4,
-          borderTop: '1px solid #E2E8F0',
-          color: '#0F172A',
+          borderTop: '1px solid var(--border)',
+          color: 'var(--foreground)',
           fontWeight: 700,
         }}
       >
         <span>Total</span>
-        <span style={{ color: '#EA580C', fontVariantNumeric: 'tabular-nums' }}>
+        <span style={{ color: ACCENT_ORANGE, fontVariantNumeric: 'tabular-nums' }}>
           {formatCurrency(total)}
         </span>
       </div>
