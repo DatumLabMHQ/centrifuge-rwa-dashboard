@@ -177,7 +177,13 @@ export default function MorphoSubPage() {
                 height="h-64"
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={m.irmCurve} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  {/* margin.top bumped from 8 → 18 to fit the "NOW"
+                       reference-line label, which renders ABOVE the plot
+                       (position: 'top') and was getting clipped by the
+                       panel's top edge. Ten pixels is enough for a 10px
+                       font label without re-introducing the dead band that
+                       the legend-into-header refactor removed. */}
+                  <LineChart data={m.irmCurve} margin={{ top: 18, right: 12, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis
                       dataKey="utilization"
