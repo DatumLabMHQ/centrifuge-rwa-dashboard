@@ -341,7 +341,13 @@ function SwapActivitySection({
               height={28}
               iconType="circle"
               iconSize={9}
-              wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
+              wrapperStyle={{
+                fontSize: 11,
+                paddingBottom: 8,
+                // Theme-aware so the "On-chain Volume" label is readable in
+                // both light and dark modes. Recharts defaults to #000.
+                color: 'var(--foreground)',
+              }}
             />
             <Bar
               dataKey="onchainVol"

@@ -221,7 +221,11 @@ export default function OverviewPage() {
                   return (
                     <span
                       style={{
-                        color: isHidden ? '#94A3B8' : '#0F172A',
+                        // Theme-aware: foreground in active state, muted
+                        // when toggled off. Was hardcoded slate-900 /
+                        // slate-400 which made chain names invisible
+                        // against the dark plot background.
+                        color: isHidden ? 'var(--text-subtle)' : 'var(--foreground)',
                         textDecoration: isHidden ? 'line-through' : 'none',
                         textTransform: 'capitalize',
                         cursor: 'pointer',
