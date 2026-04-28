@@ -281,7 +281,25 @@ function PoolTableRow({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={7} style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 16px' }}>
+          <td
+            colSpan={7}
+            style={{
+              // --bg-2 sits between the page bg (--bg) and the panel
+              // surface (--surface) in both themes, so the expanded
+              // body looks like a recessed sub-panel inside the parent.
+              // The inner data-table headers are styled with --surface-2
+              // (a slightly different shade) so they remain visually
+              // distinct from the expanded body's bg.
+              //
+              // Was hardcoded `rgba(255,255,255,0.02)` — fine in dark
+              // mode (subtle lightening) but added no contrast in light
+              // mode and clearly broke the inner table's themed bg
+              // inheritance.
+              background: 'var(--bg-2)',
+              padding: '12px 16px',
+              borderTop: '1px solid var(--border)',
+            }}
+          >
             <div className="space-y-3">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-[11px]">
                 <div>
@@ -307,7 +325,7 @@ function PoolTableRow({
                 <div className="counter-label" style={{ marginBottom: 6 }}>
                   Per-chain breakdown
                 </div>
-                <table className="data-table" style={{ background: 'var(--background)' }}>
+                <table className="data-table">
                   <thead>
                     <tr>
                       <th>Chain</th>
