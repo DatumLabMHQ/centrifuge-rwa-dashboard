@@ -278,7 +278,7 @@ export default function MorphoSubPage() {
             )}
 
             {m.historicalUtilization.length > 2 && (
-              <ChartPanel title="UTILIZATION" badge="90% = danger zone" height="h-56">
+              <ChartPanel title="UTILIZATION" height="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={m.historicalUtilization} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
                     <defs>
