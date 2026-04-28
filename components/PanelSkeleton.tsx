@@ -39,7 +39,18 @@ export function PanelSkeleton({
             className="absolute inset-0 flex items-center justify-center pointer-events-none"
             style={{ color: 'var(--text-muted)' }}
           >
-            <span className="text-[11px] font-mono px-3 py-1.5 rounded bg-white/80 border" style={{ borderColor: 'var(--border)' }}>
+            {/* Translucent panel-coloured pill so the description reads
+                 against both the light skeleton (light theme) and the
+                 darker skeleton (dark theme). bg-white/80 was light-only
+                 and made the pill glow weirdly in dark mode. */}
+            <span
+              className="text-[11px] font-mono px-3 py-1.5 rounded border"
+              style={{
+                background: 'var(--card)',
+                borderColor: 'var(--border)',
+                opacity: 0.92,
+              }}
+            >
               {description}
             </span>
           </div>

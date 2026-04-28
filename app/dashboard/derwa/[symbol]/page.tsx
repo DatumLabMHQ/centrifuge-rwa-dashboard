@@ -188,7 +188,7 @@ export default function DerwaDetailPage() {
       {/* ─── Section 3: DeFi Activity Card — lending markets + DEX venues ─── */}
       <div
         className="rounded-lg overflow-hidden"
-        style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
+        style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}
       >
         <div className="px-4 py-3 flex items-center justify-between" style={{ background: 'var(--panel-header)', borderBottom: '1px solid var(--border)' }}>
           <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--accent-orange)' }}>
@@ -347,7 +347,7 @@ export default function DerwaDetailPage() {
       {data?.integrations.some((i) => i.kind === 'oracle') && (
         <div
           className="rounded-lg overflow-hidden"
-          style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
+          style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}
         >
           <div
             className="px-4 py-3 flex items-center justify-between"
@@ -445,7 +445,7 @@ function HeroTile({
 }) {
   const clr = color === 'orange' ? 'var(--accent-orange)' : color === 'green' ? 'var(--accent-green)' : color === 'red' ? 'var(--accent-red)' : undefined;
   const inner = (
-    <div className="rounded p-4" style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
+    <div className="rounded p-4" style={{ background: 'var(--card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
       <div className="counter-label">{label}</div>
       <div className="text-[22px] font-bold" style={{ color: clr, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
       <div className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{sub}</div>

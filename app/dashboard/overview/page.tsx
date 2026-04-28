@@ -345,7 +345,7 @@ function TvlByChainTooltip({
         borderRadius: 4,
         fontSize: 11,
         padding: '10px 12px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+        boxShadow: 'var(--shadow-md)',
         minWidth: 160,
         color: 'var(--foreground)',
       }}

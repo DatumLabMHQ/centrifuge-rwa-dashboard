@@ -294,7 +294,7 @@ function ExpandedPanel({
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--card)',
-          boxShadow: '0 20px 60px rgba(15,23,42,0.25)',
+          boxShadow: 'var(--shadow-lg)',
         }}
       >
         <div className="tui-panel-header">

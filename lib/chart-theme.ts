@@ -56,7 +56,7 @@ export const TOOLTIP_STYLE: CSSProperties = {
   borderRadius: 4,
   fontSize: 11,
   color: 'var(--foreground)',
-  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+  boxShadow: 'var(--shadow-md)',
 };
 
 export const TOOLTIP_LABEL_STYLE: CSSProperties = {
