@@ -149,10 +149,18 @@ export default function MorphoSubPage() {
             {m.irmCurve.length > 0 && (
               <ChartPanel title="INTEREST RATE MODEL" badge="Rates vs utilization" height="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={m.irmCurve} margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
+                  <LineChart data={m.irmCurve} margin={{ top: 36, right: 12, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis
                       dataKey="utilization"
+                      type="number"
+                      domain={[0, 1]}
+                      // Six clean ticks at standard utilization milestones
+                      // instead of one tick per data point — Recharts'
+                      // default behaviour was rendering ~18 labels (every
+                      // utilisation snapshot from the IRM curve), which
+                      // overlapped each other and made the axis unreadable.
+                      ticks={[0, 0.2, 0.4, 0.6, 0.8, 1]}
                       tick={{ fontSize: 9, fill: '#64748B' }}
                       tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
                       stroke="#CBD5E1"
@@ -178,8 +186,12 @@ export default function MorphoSubPage() {
                       strokeWidth={2}
                       label={{ value: 'NOW', position: 'top', fontSize: 10, fill: '#EA580C', fontWeight: 700 }}
                     />
-                    <Line type="monotone" dataKey="supplyApy" name="Supply APY" stroke="#16A34A" strokeWidth={2} dot={false} />
+                    {/* Borrow drawn first → Supply drawn on top. Recharts'
+                         legend renders in REVERSE child order, so this gives
+                         "Supply APY · Borrow APY" reading order in the legend,
+                         matching the economics (lender perspective leads). */}
                     <Line type="monotone" dataKey="borrowApy" name="Borrow APY" stroke="#DC2626" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="supplyApy" name="Supply APY" stroke="#16A34A" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </ChartPanel>
@@ -188,14 +200,17 @@ export default function MorphoSubPage() {
             {m.historicalSupplyApy.length > 2 && (
               <ChartPanel title="APY HISTORY" badge="Lender vs borrower rates over time" height="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
+                  <LineChart margin={{ top: 36, right: 12, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} allowDuplicatedCategory={false} />
                     <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} stroke="#CBD5E1" width={48} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => `${(Number(v) * 100).toFixed(2)}%`} />
                     <Legend {...LEGEND_PROPS} />
-                    <Line data={m.historicalSupplyApy} type="monotone" dataKey="y" name="Supply APY" stroke="#16A34A" strokeWidth={1.5} dot={false} />
+                    {/* Borrow first so it draws underneath; Supply on top.
+                         Recharts reverses legend order vs JSX, so the
+                         on-screen legend reads "Supply APY · Borrow APY". */}
                     <Line data={m.historicalBorrowApy} type="monotone" dataKey="y" name="Borrow APY" stroke="#DC2626" strokeWidth={1.5} dot={false} />
+                    <Line data={m.historicalSupplyApy} type="monotone" dataKey="y" name="Supply APY" stroke="#16A34A" strokeWidth={1.5} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </ChartPanel>
@@ -207,7 +222,7 @@ export default function MorphoSubPage() {
             {m.historicalSupplyUsd.length > 2 && (
               <ChartPanel title="SUPPLY & BORROW" badge={`${m.historicalSupplyUsd.length} data points`} height="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
+                  <AreaChart margin={{ top: 36, right: 12, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradSupply" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#16A34A" stopOpacity={0.2} />
@@ -223,8 +238,11 @@ export default function MorphoSubPage() {
                     <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => formatCurrency(v)} stroke="#CBD5E1" width={60} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => formatCurrency(Number(v))} />
                     <Legend {...LEGEND_PROPS} iconType="square" />
-                    <Area data={m.historicalSupplyUsd} type="monotone" dataKey="y" name="Supply" stroke="#16A34A" fill="url(#gradSupply)" strokeWidth={1.5} />
+                    {/* Borrow first so the Supply area draws on top — and
+                         Recharts reverses legend order, so the on-screen
+                         legend reads "Supply · Borrow". */}
                     <Area data={m.historicalBorrowUsd} type="monotone" dataKey="y" name="Borrow" stroke="#DC2626" fill="url(#gradBorrow)" strokeWidth={1.5} />
+                    <Area data={m.historicalSupplyUsd} type="monotone" dataKey="y" name="Supply" stroke="#16A34A" fill="url(#gradSupply)" strokeWidth={1.5} />
                   </AreaChart>
                 </ResponsiveContainer>
               </ChartPanel>
@@ -233,7 +251,7 @@ export default function MorphoSubPage() {
             {m.historicalUtilization.length > 2 && (
               <ChartPanel title="UTILIZATION" badge="90% = danger zone" height="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={m.historicalUtilization} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <AreaChart data={m.historicalUtilization} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradUtil" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#EA580C" stopOpacity={0.25} />
@@ -244,10 +262,15 @@ export default function MorphoSubPage() {
                     <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={fmtTs} stroke="#CBD5E1" tickMargin={6} minTickGap={30} />
                     <YAxis tick={{ fontSize: 9, fill: '#64748B' }} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} stroke="#CBD5E1" width={45} domain={[0, 1]} />
                     <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => fmtTsFull(Number(v))} formatter={(v) => `${(Number(v) * 100).toFixed(1)}%`} />
-                    {/* `position: 'right'` placed the label outside the plot
-                         area where it was clipped to a stray "9". `insideTopRight`
-                         keeps the full "90%" inside the chart. */}
-                    <ReferenceLine y={0.9} stroke="var(--accent-red)" strokeDasharray="4 4" label={{ value: '90% danger', position: 'insideTopRight', fontSize: 9, fill: '#DC2626', fontWeight: 700 }} />
+                    {/* Anchor the label at top-LEFT instead of top-right.
+                         `insideTopRight` was leaking text past the right edge
+                         (no right-margin allowance, so the label clipped to a
+                         partial "danger" fragment). Top-left of the plot is
+                         empty space — utilisation rarely drops below 50%, so
+                         the label floats clear of any data. Also shortened
+                         to "90% max" since the panel badge already carries
+                         the "danger zone" framing. */}
+                    <ReferenceLine y={0.9} stroke="var(--accent-red)" strokeDasharray="4 4" label={{ value: '90% max', position: 'insideTopLeft', fontSize: 9, fill: '#DC2626', fontWeight: 700 }} />
                     <Area type="monotone" dataKey="y" name="Utilization" stroke="#EA580C" fill="url(#gradUtil)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
