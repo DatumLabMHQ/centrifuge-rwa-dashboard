@@ -94,6 +94,7 @@
 }
 
 body[data-theme="dark"] {
+  /* ── Base tokens ── */
   --bg:            #0C0D0F;
   --bg-2:          #141518;
   --surface:       #16171A;
@@ -107,6 +108,35 @@ body[data-theme="dark"] {
   --orange-soft:   rgba(255, 107, 53, 0.14);
   --green:         #2ECC71;
   --red:           #FF5A5A;
+
+  /* ── Legacy aliases — EXPLICITLY OVERRIDDEN to dark values ──
+     The aliases in :root use `var(--surface)` etc. via the CSS var
+     chain, which SHOULD flip when --surface flips, and does in most
+     contexts. But inline `style={{ background: 'var(--card)' }}`
+     attributes proved unreliable in production: many cards rendered
+     with the light-theme value even with body[data-theme="dark"]
+     set, because the alias resolution at :root's compute scope was
+     locking in the light value before the cascade could update it.
+     Explicit overrides at the body level match the specificity of
+     the base tokens above and bypass the chain entirely. */
+  --background:        #0C0D0F;
+  --foreground:        #ECEDEF;
+  --card:              #16171A;
+  --card-hover:        rgba(255, 255, 255, 0.04);
+  --panel-header:      #1B1D21;
+  --text-muted:        #9094A0;
+  --text-subtle:       #5F636D;
+  --border-bright:     rgba(255, 255, 255, 0.14);
+  --accent-orange:     #FF6B35;
+  --accent-orange-soft: rgba(255, 107, 53, 0.14);
+  --accent-red:        #FF5A5A;
+  --accent-red-soft:   rgba(255, 90, 90, 0.14);
+  --accent-green:      #2ECC71;
+  --accent-green-soft: rgba(46, 204, 113, 0.14);
+  --accent-blue:       #3B5FE0;
+  --accent-purple:     #9B4AE0;
+  --accent-yellow:     #D97706;
+
   /* Dark-mode shadows: top-edge inset highlight (1px of light) plus a
      heavier drop shadow. Gives cards a proper "lifted" look against
      the dark surface — pure dark shadows alone read as invisible. */
