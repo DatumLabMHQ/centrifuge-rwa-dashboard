@@ -186,7 +186,7 @@ export const RECENT_FLOW_TRANSACTIONS_QUERY = gql`
       }
     ) {
       items {
-        txHash
+        txHash: createdAtTxHash
         poolId
         tokenId
         type
