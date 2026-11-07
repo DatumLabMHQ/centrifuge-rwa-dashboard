@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
  * Pass-through to api.centrifuge.io for the Datum data platform.
  *
  * Centrifuge's API answers US-east callers with 520/524 errors on real queries (2026-09-04) while
- * European callers get sub-second responses. This deployment runs in London, so the platform's
+ * European callers get sub-second responses. This Worker is placed in London (see cloudflare.config.ts), so the platform's
  * GitHub runner (US) posts its GraphQL here and we forward it unchanged. Requires the shared key
  * in `x-proxy-key`; refuses everything when GRAPH_PROXY_KEY is unset. Only the Centrifuge
  * endpoint is reachable through it.
